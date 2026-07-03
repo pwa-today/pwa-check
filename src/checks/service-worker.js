@@ -22,6 +22,20 @@ export const hasFetchHandler = swCode => {
   );
 };
 
+export const hasInstallHandler = swCode => {
+  return (
+    /addEventListener\s*\(\s*['"`]install['"`]/.test(swCode) ||
+    /oninstall\s*=/.test(swCode)
+  );
+};
+
+export const hasActivateHandler = swCode => {
+  return (
+    /addEventListener\s*\(\s*['"`]activate['"`]/.test(swCode) ||
+    /onactivate\s*=/.test(swCode)
+  );
+};
+
 export const cachesAssets = swCode => {
   return (
     /caches\.open\s*\(/.test(swCode) ||
@@ -92,6 +106,18 @@ export const checkServiceWorker = async (html, pageUrl) => {
   );
 
   const swCode = await fetchText(serviceWorkerUrls[0]);
+
+  results.push(
+    hasInstallHandler(swCode)
+      ? result('pass', 'Service worker has install event handler')
+      : result('warn', 'Service worker has no install event handler')
+  );
+
+  results.push(
+    hasActivateHandler(swCode)
+      ? result('pass', 'Service worker has activate event handler')
+      : result('warn', 'Service worker has no activate event handler')
+  );
 
   results.push(
     hasFetchHandler(swCode)
