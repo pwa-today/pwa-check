@@ -151,6 +151,36 @@ const hasValidShortcutIconSizes = icons => {
   );
 };
 
+const isAssetReachable = async assetUrl => {
+  try {
+    const response = await fetch(assetUrl, { redirect: 'follow' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+const checkAssetReachabilityBatch = async (results, label, assets, baseUrl) => {
+  const tasks = assets
+    .filter(assetUrl => typeof assetUrl === 'string' && assetUrl.length > 0)
+    .map(async assetUrl => {
+      const resolvedUrl = resolveUrl(baseUrl, assetUrl);
+      const reachable = await isAssetReachable(resolvedUrl);
+
+      return reachable
+        ? result('pass', `${label} is reachable: ${resolvedUrl}`)
+        : result('warn', `${label} is not reachable: ${resolvedUrl}`);
+    });
+
+  const settled = await Promise.allSettled(tasks);
+
+  for (const entry of settled) {
+    if (entry.status === 'fulfilled') {
+      results.push(entry.value);
+    }
+  }
+};
+
 const screenshotAspectRatio = screenshot => {
   const parsedSizes =
     typeof screenshot?.sizes === 'string'
@@ -394,6 +424,13 @@ export const checkManifest = async (html, pageUrl) => {
           ? result('pass', 'Manifest has no more than 5 narrow screenshots')
           : result('warn', 'Manifest defines more than 5 narrow screenshots')
       );
+
+      await checkAssetReachabilityBatch(
+        results,
+        'Manifest screenshot',
+        manifest.screenshots.map(screenshot => screenshot?.src),
+        manifestUrl
+      );
     } else {
       results.push(result('warn', 'Manifest does not define screenshots'));
     }
@@ -451,6 +488,13 @@ export const checkManifest = async (html, pageUrl) => {
           ? result('pass', 'Manifest includes a 512x512 maskable icon')
           : result('warn', 'Manifest does not include a 512x512 maskable icon')
       );
+
+      await checkAssetReachabilityBatch(
+        results,
+        'Manifest icon',
+        manifest.icons.map(icon => icon?.src),
+        manifestUrl
+      );
     } else {
       results.push(result('warn', 'Manifest does not define icons'));
     }
@@ -502,6 +546,15 @@ export const checkManifest = async (html, pageUrl) => {
           ? result('pass', 'Manifest shortcut icons include src and sizes')
           : result('warn', 'Manifest shortcut icons do not consistently include src and sizes')
         );
+
+        for (const shortcut of shortcutsWithIcons) {
+          await checkAssetReachabilityBatch(
+            results,
+            'Manifest shortcut icon',
+            shortcut.icons.map(icon => icon?.src),
+            manifestUrl
+          );
+        }
       }
     } else {
       results.push(result('warn', 'Manifest does not define shortcuts'));
