@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { checkPwa } from '../src/checker.js';
 
 const url = process.argv[2];
@@ -15,9 +14,11 @@ console.log(`\nPWA Check\nChecking ${url}\n`);
 
 for (const result of results) {
   const icon =
-    result.status === 'pass' ? '✓' :
-    result.status === 'warn' ? '⚠' :
-    '✗';
+    result.status === 'pass'
+      ? '\x1b[32m✓\x1b[0m'
+      : result.status === 'warn'
+        ? '\x1b[31m⚠\x1b[0m'
+        : '\x1b[31m✗ FAIL\x1b[0m';
 
   console.log(`${icon} ${result.message}`);
 }

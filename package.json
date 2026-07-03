@@ -5,7 +5,11 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["pwa", "progressive web app", "service worker"],
+  "keywords": [
+    "pwa",
+    "progressive web app",
+    "service worker"
+  ],
   "author": "Danny Moerkerke <danny@dannymoerkerke.nl>",
   "license": "ISC",
   "type": "module",

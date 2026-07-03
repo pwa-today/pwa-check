@@ -1,6 +1,7 @@
 import { fetchText } from '../utils/fetch-text.js';
 import { result } from '../utils/result.js';
 import { resolveUrl } from '../utils/url.js';
+import { findScriptUrls } from '../utils/find-script-urls.js';
 
 export const findServiceWorkerUrls = (html, pageUrl) => {
   const matches = [...html.matchAll(
@@ -10,10 +11,8 @@ export const findServiceWorkerUrls = (html, pageUrl) => {
   return matches.map(match => resolveUrl(pageUrl, match[1]));
 };
 
-export const findScriptUrls = (html, pageUrl) => {
-  const matches = [...html.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi)];
-
-  return matches.map(match => resolveUrl(pageUrl, match[1]));
+const hasServiceWorkerRegistrationHint = source => {
+  return /navigator\.serviceWorker\.register\s*\(/i.test(source);
 };
 
 export const hasFetchHandler = swCode => {
@@ -51,6 +50,23 @@ export const checkServiceWorker = async (html, pageUrl) => {
   const serviceWorkerUrls = sources.flatMap(({ source, baseUrl }) =>
     findServiceWorkerUrls(source, baseUrl)
   );
+
+  if (serviceWorkerUrls.length === 0) {
+    const hasRegistrationHint = sources.some(({ source }) =>
+      hasServiceWorkerRegistrationHint(source)
+    );
+
+    if (hasRegistrationHint) {
+      results.push(
+        result(
+          'pass',
+          'Service worker registration is present, but the script does not expose a static URL'
+        )
+      );
+
+      return results;
+    }
+  }
 
   if (serviceWorkerUrls.length === 0) {
     results.push(result('fail', 'No service worker registration found'));
