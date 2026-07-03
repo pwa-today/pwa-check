@@ -1,6 +1,7 @@
 import { checkManifest } from './checks/manifest.js';
 import { checkIosSplashScreens } from './checks/ios-splash-screens.js';
 import { checkServiceWorker } from './checks/service-worker.js';
+import { checkViewport } from './checks/viewport.js';
 import { fetchText } from './utils/fetch-text.js';
 import { result } from './utils/result.js';
 import { normalizeUrl } from './utils/url.js';
@@ -20,6 +21,7 @@ export const checkPwa = async inputUrl => {
   }
 
   results.push(...await checkManifest(html, pageUrl));
+  results.push(...await checkViewport(html, pageUrl));
   results.push(...await checkIosSplashScreens(html, pageUrl));
   results.push(...await checkServiceWorker(html, pageUrl));
 

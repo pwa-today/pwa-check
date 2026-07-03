@@ -30,6 +30,20 @@ export const cachesAssets = swCode => {
   );
 };
 
+export const hasPushHandler = swCode => {
+  return (
+    /addEventListener\s*\(\s*['"`]push['"`]/.test(swCode) ||
+    /onpush\s*=/.test(swCode)
+  );
+};
+
+export const hasNotificationClickHandler = swCode => {
+  return (
+    /addEventListener\s*\(\s*['"`]notificationclick['"`]/.test(swCode) ||
+    /onnotificationclick\s*=/.test(swCode)
+  );
+};
+
 export const checkServiceWorker = async (html, pageUrl) => {
   const results = [];
 
@@ -89,6 +103,18 @@ export const checkServiceWorker = async (html, pageUrl) => {
     cachesAssets(swCode)
       ? result('pass', 'Service worker appears to cache assets')
       : result('warn', 'Service worker does not appear to cache assets')
+  );
+
+  results.push(
+    hasPushHandler(swCode)
+      ? result('pass', 'Service worker has push event handler')
+      : result('warn', 'Service worker has no push event handler')
+  );
+
+  results.push(
+    hasNotificationClickHandler(swCode)
+      ? result('pass', 'Service worker has notificationclick event handler')
+      : result('warn', 'Service worker has no notificationclick event handler')
   );
 
   return results;

@@ -140,6 +140,17 @@ const parseSize = size => {
   };
 };
 
+const hasValidShortcutIconSizes = icons => {
+  return icons.every(
+    icon =>
+      icon &&
+      typeof icon.src === 'string' &&
+      icon.src.length > 0 &&
+      typeof icon.sizes === 'string' &&
+      /^\d+x\d+$/i.test(icon.sizes)
+  );
+};
+
 const screenshotAspectRatio = screenshot => {
   const parsedSizes =
     typeof screenshot?.sizes === 'string'
@@ -442,6 +453,58 @@ export const checkManifest = async (html, pageUrl) => {
       );
     } else {
       results.push(result('warn', 'Manifest does not define icons'));
+    }
+
+    if (Array.isArray(manifest.shortcuts) && manifest.shortcuts.length > 0) {
+      results.push(result('pass', 'Manifest defines shortcuts'));
+
+      const hasRequiredShortcutMembers = manifest.shortcuts.every(
+        shortcut =>
+          shortcut &&
+          typeof shortcut.name === 'string' &&
+          shortcut.name.length > 0 &&
+          typeof shortcut.url === 'string' &&
+          shortcut.url.length > 0
+      );
+
+      results.push(
+        hasRequiredShortcutMembers
+          ? result('pass', 'Manifest shortcuts include name and url')
+          : result('warn', 'Manifest shortcuts do not consistently include name and url')
+      );
+
+      const optionalShortcutMembersPresent = manifest.shortcuts.every(shortcut => {
+        if (!shortcut) return false;
+
+        const optionalKeys = ['short_name', 'description'];
+        return optionalKeys.every(key => {
+          return (
+            shortcut[key] === undefined ||
+            typeof shortcut[key] === 'string'
+          );
+        });
+      });
+
+      results.push(
+        optionalShortcutMembersPresent
+          ? result('pass', 'Manifest shortcuts optionally include short_name and description')
+          : result('warn', 'Manifest shortcuts include invalid short_name or description values')
+      );
+
+      const shortcutsWithIcons = manifest.shortcuts.filter(shortcut => Array.isArray(shortcut?.icons));
+      if (shortcutsWithIcons.length > 0) {
+        const hasValidShortcutIcons = shortcutsWithIcons.every(shortcut =>
+          hasValidShortcutIconSizes(shortcut.icons)
+        );
+
+        results.push(
+          hasValidShortcutIcons
+          ? result('pass', 'Manifest shortcut icons include src and sizes')
+          : result('warn', 'Manifest shortcut icons do not consistently include src and sizes')
+        );
+      }
+    } else {
+      results.push(result('warn', 'Manifest does not define shortcuts'));
     }
   } catch (error) {
     results.push(result('fail', `Could not read manifest: ${error.message}`));
