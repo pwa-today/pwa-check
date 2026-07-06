@@ -17,6 +17,10 @@ export const findManifestUrl = (source, pageUrl) => {
   return resolveUrl(pageUrl, hrefMatch[1]);
 };
 
+export const loadManifest = async manifestUrl => {
+  return JSON.parse(await fetchText(manifestUrl));
+};
+
 const findManifestUrlInScript = (source, pageUrl) => {
   const htmlLinkMatch = source.match(
     /<link[^>]+rel=["'][^"']*\bmanifest\b[^"']*["'][^>]*>/i
@@ -197,6 +201,10 @@ const isAssetReachable = async assetUrl => {
 };
 
 const checkAssetReachabilityBatch = async (results, label, assets, baseUrl) => {
+  if (!baseUrl) {
+    return;
+  }
+
   const tasks = assets
     .filter(assetUrl => typeof assetUrl === 'string' && assetUrl.length > 0)
     .map(async assetUrl => {
@@ -227,6 +235,401 @@ const screenshotAspectRatio = screenshot => {
 
   const [{ width, height }] = parsedSizes;
   return Math.max(width, height) / Math.min(width, height);
+};
+
+export const checkManifestMembers = async (manifest, manifestUrl = null) => {
+  const results = [];
+
+  results.push(
+    manifest.scope
+      ? result('pass', 'Manifest has scope member')
+      : result('warn', 'Manifest does not have scope member')
+  );
+
+  if (typeof manifest.display === 'string' && manifest.display.length > 0) {
+    const allowedDisplays = ['standalone', 'fullscreen', 'minimal-ui', 'browser'];
+
+    results.push(
+      allowedDisplays.includes(manifest.display)
+        ? result('pass', `Manifest display is valid: ${manifest.display}`)
+        : result(
+            'warn',
+            'Manifest display must be standalone, fullscreen, minimal-ui, or browser; standalone is recommended'
+          )
+    );
+  } else {
+    results.push(result('warn', 'Manifest does not have display member'));
+  }
+
+  results.push(
+    manifest.start_url
+      ? result('pass', `Manifest has start_url member: ${manifest.start_url}`)
+      : result('warn', 'Manifest does not have start_url member')
+  );
+
+  results.push(
+    manifest.description
+      ? result('pass', 'Manifest has description member')
+      : result('warn', 'Manifest does not have description member')
+  );
+
+  if (typeof manifest.short_name === 'string' && manifest.short_name.length > 0) {
+    if (manifest.short_name.length > 15) {
+      results.push(
+        result(
+          'warn',
+          `Manifest short_name is too long (${manifest.short_name.length} characters); recommended maximum is 15`
+        )
+      );
+    } else {
+      results.push(
+        result(
+          'pass',
+          `Manifest short_name length is acceptable (${manifest.short_name.length} characters)`
+        )
+      );
+    }
+  } else {
+    results.push(result('warn', 'Manifest does not have short_name member'));
+  }
+
+  results.push(
+    manifest.orientation
+      ? result('pass', `Manifest has orientation member: ${manifest.orientation}`)
+      : result('warn', 'Manifest does not have orientation member')
+  );
+
+  if (Array.isArray(manifest.screenshots) && manifest.screenshots.length > 0) {
+    results.push(result('pass', 'Manifest defines screenshots'));
+
+    const screenshotMembers = ['src', 'sizes', 'type', 'form_factor'];
+    const hasRequiredScreenshotFields = manifest.screenshots.every(
+      screenshot =>
+        screenshot &&
+        screenshotMembers.every(member => Object.prototype.hasOwnProperty.call(screenshot, member))
+    );
+
+    results.push(
+      hasRequiredScreenshotFields
+        ? result('pass', 'Manifest screenshots include src, sizes, type, and form_factor')
+        : result('warn', 'Manifest screenshots do not consistently include src, sizes, type, and form_factor')
+    );
+
+    const invalidScreenshotTypes = manifest.screenshots.filter(
+      screenshot => !['image/png', 'image/jpg', 'image/jpeg'].includes(screenshot?.type)
+    );
+
+    results.push(
+      invalidScreenshotTypes.length === 0
+        ? result('pass', 'Manifest screenshots use supported image types')
+        : result('warn', 'Manifest screenshots use unsupported image types')
+    );
+
+    const invalidScreenshotSizes = manifest.screenshots.filter(screenshot => {
+      const parsedSizes =
+        typeof screenshot?.sizes === 'string'
+          ? screenshot.sizes.split(/\s+/).map(parseSize)
+          : [];
+
+      return (
+        parsedSizes.length === 0 ||
+        parsedSizes.some(
+          size =>
+            !size ||
+            size.width < 320 ||
+            size.width > 3840 ||
+            size.height < 320 ||
+            size.height > 3840
+        )
+      );
+    });
+
+    results.push(
+      invalidScreenshotSizes.length === 0
+        ? result('pass', 'Manifest screenshots use valid sizes between 320px and 3840px')
+        : result('warn', 'Manifest screenshots include sizes outside 320px to 3840px')
+    );
+
+    const wideScreenshots = manifest.screenshots.filter(
+      screenshot => screenshot?.form_factor === 'wide'
+    );
+    const narrowScreenshots = manifest.screenshots.filter(
+      screenshot => screenshot?.form_factor === 'narrow'
+    );
+
+    results.push(
+      wideScreenshots.length > 0
+        ? result('pass', 'Manifest includes at least one wide screenshot')
+        : result('warn', 'Manifest does not include a wide screenshot')
+    );
+
+    results.push(
+      narrowScreenshots.length > 0
+        ? result('pass', 'Manifest includes at least one narrow screenshot')
+        : result('warn', 'Manifest does not include a narrow screenshot')
+    );
+
+    const invalidAspectGroups = [wideScreenshots, narrowScreenshots].filter(screenshots => {
+      if (screenshots.length === 0) return false;
+
+      const ratios = screenshots
+        .map(screenshotAspectRatio)
+        .filter(ratio => typeof ratio === 'number' && Number.isFinite(ratio));
+
+      if (ratios.length === 0) return true;
+
+      const minRatio = Math.min(...ratios);
+      const maxRatio = Math.max(...ratios);
+
+      return maxRatio / minRatio > 2.3;
+    });
+
+    results.push(
+      invalidAspectGroups.length === 0
+        ? result('pass', 'Manifest screenshots keep aspect ratios within the 2.3 limit')
+        : result('warn', 'Manifest screenshots have aspect ratios outside the 2.3 limit')
+    );
+
+    results.push(
+      manifest.screenshots.length <= 8
+        ? result('pass', 'Manifest has no more than 8 screenshots')
+        : result('warn', 'Manifest defines more than 8 screenshots')
+    );
+
+    results.push(
+      narrowScreenshots.length <= 5
+        ? result('pass', 'Manifest has no more than 5 narrow screenshots')
+        : result('warn', 'Manifest defines more than 5 narrow screenshots')
+    );
+
+    await checkAssetReachabilityBatch(
+      results,
+      'Manifest screenshot',
+      manifest.screenshots.map(screenshot => screenshot?.src),
+      manifestUrl
+    );
+  } else {
+    results.push(result('warn', 'Manifest does not define screenshots'));
+  }
+
+  if (Array.isArray(manifest.icons) && manifest.icons.length > 0) {
+    results.push(result('pass', 'Manifest defines icons'));
+
+    const hasRequiredIconFields = manifest.icons.some(
+      icon => icon && icon.src && icon.type && icon.sizes
+    );
+
+    results.push(
+      hasRequiredIconFields
+        ? result('pass', 'Manifest icons include src, type, and sizes')
+        : result('warn', 'Manifest icons do not consistently include src, type, and sizes')
+    );
+
+    const iconSizes = manifest.icons
+      .map(icon => icon && icon.sizes)
+      .filter(Boolean);
+
+    const missingRecommendedSizes = ['192x192', '384x384', '1024x1024'].filter(
+      size => !iconSizes.some(sizes => sizes.includes(size))
+    );
+
+    results.push(
+      iconSizes.some(sizes => sizes.includes('512x512'))
+        ? result('pass', 'Manifest includes a 512x512 icon')
+        : result('warn', 'Manifest does not include a 512x512 icon')
+    );
+
+    if (missingRecommendedSizes.length === 0) {
+      results.push(
+        result('pass', 'Manifest includes recommended 192x192, 384x384, and 1024x1024 icons')
+      );
+    } else {
+      results.push(
+        result(
+          'warn',
+          `Manifest is missing recommended icon sizes: ${missingRecommendedSizes.join(', ')}`
+        )
+      );
+    }
+
+    const hasMaskableIcon = manifest.icons.some(
+      icon =>
+        icon &&
+        icon.purpose === 'maskable' &&
+        typeof icon.sizes === 'string' &&
+        icon.sizes.includes('512x512')
+    );
+
+    results.push(
+      hasMaskableIcon
+        ? result('pass', 'Manifest includes a 512x512 maskable icon')
+        : result('warn', 'Manifest does not include a 512x512 maskable icon')
+    );
+
+    await checkAssetReachabilityBatch(
+      results,
+      'Manifest icon',
+      manifest.icons.map(icon => icon?.src),
+      manifestUrl
+    );
+  } else {
+    results.push(result('warn', 'Manifest does not define icons'));
+  }
+
+  if (Array.isArray(manifest.shortcuts) && manifest.shortcuts.length > 0) {
+    results.push(result('pass', 'Manifest defines shortcuts'));
+
+    const hasRequiredShortcutMembers = manifest.shortcuts.every(
+      shortcut =>
+        shortcut &&
+        typeof shortcut.name === 'string' &&
+        shortcut.name.length > 0 &&
+        typeof shortcut.url === 'string' &&
+        shortcut.url.length > 0
+    );
+
+    results.push(
+      hasRequiredShortcutMembers
+        ? result('pass', 'Manifest shortcuts include name and url')
+        : result('warn', 'Manifest shortcuts do not consistently include name and url')
+    );
+
+    const optionalShortcutMembersPresent = manifest.shortcuts.every(shortcut => {
+      if (!shortcut) return false;
+
+      const optionalKeys = ['short_name', 'description'];
+      return optionalKeys.every(key => {
+        return (
+          shortcut[key] === undefined ||
+          typeof shortcut[key] === 'string'
+        );
+      });
+    });
+
+    results.push(
+      optionalShortcutMembersPresent
+        ? result('pass', 'Manifest shortcuts optionally include short_name and description')
+        : result('warn', 'Manifest shortcuts include invalid short_name or description values')
+    );
+
+    const shortcutsWithIcons = manifest.shortcuts.filter(shortcut => Array.isArray(shortcut?.icons));
+    if (shortcutsWithIcons.length > 0) {
+      const hasValidShortcutIcons = shortcutsWithIcons.every(shortcut =>
+        hasValidShortcutIconSizes(shortcut.icons)
+      );
+
+      results.push(
+        hasValidShortcutIcons
+        ? result('pass', 'Manifest shortcut icons include src and sizes')
+        : result('warn', 'Manifest shortcut icons do not consistently include src and sizes')
+      );
+
+      for (const shortcut of shortcutsWithIcons) {
+        await checkAssetReachabilityBatch(
+          results,
+          'Manifest shortcut icon',
+          shortcut.icons.map(icon => icon?.src),
+          manifestUrl
+        );
+      }
+    }
+  } else {
+    results.push(result('warn', 'Manifest does not define shortcuts'));
+  }
+
+  if (manifest.share_target && typeof manifest.share_target === 'object') {
+    results.push(result('pass', 'Manifest defines share_target'));
+
+    const shareTarget = manifest.share_target;
+    const isRelativeAction =
+      typeof shareTarget.action === 'string' &&
+      shareTarget.action.length > 0 &&
+      !/^https?:\/\//i.test(shareTarget.action);
+
+    results.push(
+      isRelativeAction
+        ? result('pass', 'Manifest share_target action is a relative URL')
+        : result('warn', 'Manifest share_target action is missing or is not a relative URL')
+    );
+
+    const hasValidMethod =
+      typeof shareTarget.method === 'string' &&
+      ['GET', 'POST'].includes(shareTarget.method.toUpperCase());
+
+    results.push(
+      hasValidMethod
+        ? result('pass', `Manifest share_target method is valid: ${shareTarget.method.toUpperCase()}`)
+        : result('warn', 'Manifest share_target method must be GET or POST')
+    );
+
+    if (String(shareTarget.method).toUpperCase() === 'POST') {
+      results.push(
+        shareTarget.enctype === 'multipart/form-data'
+          ? result('pass', 'Manifest share_target enctype is multipart/form-data')
+          : result('warn', 'Manifest share_target enctype must be multipart/form-data when method is POST')
+      );
+    }
+
+    if (shareTarget.params && typeof shareTarget.params === 'object') {
+      const allowedParamKeys = ['title', 'text', 'url', 'files'];
+      const invalidParamKeys = Object.keys(shareTarget.params).filter(
+        key => !allowedParamKeys.includes(key)
+      );
+
+      results.push(
+        invalidParamKeys.length === 0
+          ? result('pass', 'Manifest share_target params contain supported members')
+          : result('warn', `Manifest share_target params contain unsupported members: ${invalidParamKeys.join(', ')}`)
+      );
+
+      if (Array.isArray(shareTarget.params.files) && shareTarget.params.files.length > 0) {
+        const hasValidFiles = hasValidShareTargetFiles(shareTarget.params.files);
+
+        results.push(
+          hasValidFiles
+            ? result('pass', 'Manifest share_target files include name and accept')
+            : result('warn', 'Manifest share_target files do not consistently include valid name and accept values')
+        );
+      }
+    } else {
+      results.push(result('warn', 'Manifest share_target does not define params'));
+    }
+  } else {
+    results.push(result('warn', 'Manifest does not define share_target'));
+  }
+
+  if (Array.isArray(manifest.file_handlers) && manifest.file_handlers.length > 0) {
+    results.push(result('pass', 'Manifest defines file_handlers'));
+
+    const hasValidFileHandlers = manifest.file_handlers.every(
+      fileHandler =>
+        fileHandler &&
+        typeof fileHandler.action === 'string' &&
+        fileHandler.action.length > 0 &&
+        !/^https?:\/\//i.test(fileHandler.action) &&
+        hasValidFileHandlersAccept(fileHandler.accept)
+    );
+
+    results.push(
+      hasValidFileHandlers
+        ? result('pass', 'Manifest file_handlers include a relative action and valid accept mappings')
+        : result('warn', 'Manifest file_handlers do not consistently include a relative action and valid accept mappings')
+    );
+  } else {
+    results.push(result('warn', 'Manifest does not define file_handlers'));
+  }
+
+  if (typeof manifest.handle_links === 'string' && manifest.handle_links.length > 0) {
+    results.push(
+      ['preferred', 'not-preferred', 'auto'].includes(manifest.handle_links)
+        ? result('pass', `Manifest handle_links is valid: ${manifest.handle_links}`)
+        : result('warn', 'Manifest handle_links must be preferred, not-preferred, or auto')
+    );
+  } else {
+    results.push(result('warn', 'Manifest does not define handle_links'));
+  }
+
+  return results;
 };
 
 export const checkManifest = async (html, pageUrl) => {
@@ -303,390 +706,9 @@ export const checkManifest = async (html, pageUrl) => {
   }
 
   try {
-    const manifestText = await fetchText(manifestUrl);
-    const manifest = JSON.parse(manifestText);
-
+    const manifest = await loadManifest(manifestUrl);
     results.push(result('pass', 'Manifest is valid JSON'));
-
-    results.push(
-      manifest.scope
-        ? result('pass', 'Manifest has scope member')
-        : result('warn', 'Manifest does not have scope member')
-    );
-
-    results.push(
-      manifest.display
-        ? result('pass', `Manifest has display member: ${manifest.display}`)
-        : result('warn', 'Manifest does not have display member')
-    );
-
-    results.push(
-      manifest.start_url
-        ? result('pass', `Manifest has start_url member: ${manifest.start_url}`)
-        : result('warn', 'Manifest does not have start_url member')
-    );
-
-    results.push(
-      manifest.description
-        ? result('pass', 'Manifest has description member')
-        : result('warn', 'Manifest does not have description member')
-    );
-
-    if (typeof manifest.short_name === 'string' && manifest.short_name.length > 0) {
-      if (manifest.short_name.length > 15) {
-        results.push(
-          result(
-            'warn',
-            `Manifest short_name is too long (${manifest.short_name.length} characters); recommended maximum is 15`
-          )
-        );
-      } else {
-        results.push(
-          result(
-            'pass',
-            `Manifest short_name length is acceptable (${manifest.short_name.length} characters)`
-          )
-        );
-      }
-    } else {
-      results.push(result('warn', 'Manifest does not have short_name member'));
-    }
-
-    results.push(
-      manifest.orientation
-        ? result('pass', `Manifest has orientation member: ${manifest.orientation}`)
-        : result('warn', 'Manifest does not have orientation member')
-    );
-
-    if (Array.isArray(manifest.screenshots) && manifest.screenshots.length > 0) {
-      results.push(result('pass', 'Manifest defines screenshots'));
-
-      const screenshotMembers = ['src', 'sizes', 'type', 'form_factor'];
-      const hasRequiredScreenshotFields = manifest.screenshots.every(
-        screenshot =>
-          screenshot &&
-          screenshotMembers.every(member => Object.prototype.hasOwnProperty.call(screenshot, member))
-      );
-
-      results.push(
-        hasRequiredScreenshotFields
-          ? result('pass', 'Manifest screenshots include src, sizes, type, and form_factor')
-          : result('warn', 'Manifest screenshots do not consistently include src, sizes, type, and form_factor')
-      );
-
-      const invalidScreenshotTypes = manifest.screenshots.filter(
-        screenshot => !['image/png', 'image/jpg', 'image/jpeg'].includes(screenshot?.type)
-      );
-
-      results.push(
-        invalidScreenshotTypes.length === 0
-          ? result('pass', 'Manifest screenshots use supported image types')
-          : result('warn', 'Manifest screenshots use unsupported image types')
-      );
-
-      const invalidScreenshotSizes = manifest.screenshots.filter(screenshot => {
-        const parsedSizes =
-          typeof screenshot?.sizes === 'string'
-            ? screenshot.sizes.split(/\s+/).map(parseSize)
-            : [];
-
-        return (
-          parsedSizes.length === 0 ||
-          parsedSizes.some(
-            size =>
-              !size ||
-              size.width < 320 ||
-              size.width > 3840 ||
-              size.height < 320 ||
-              size.height > 3840
-          )
-        );
-      });
-
-      results.push(
-        invalidScreenshotSizes.length === 0
-          ? result('pass', 'Manifest screenshots use valid sizes between 320px and 3840px')
-          : result('warn', 'Manifest screenshots include sizes outside 320px to 3840px')
-      );
-
-      const wideScreenshots = manifest.screenshots.filter(
-        screenshot => screenshot?.form_factor === 'wide'
-      );
-      const narrowScreenshots = manifest.screenshots.filter(
-        screenshot => screenshot?.form_factor === 'narrow'
-      );
-
-      results.push(
-        wideScreenshots.length > 0
-          ? result('pass', 'Manifest includes at least one wide screenshot')
-          : result('warn', 'Manifest does not include a wide screenshot')
-      );
-
-      results.push(
-        narrowScreenshots.length > 0
-          ? result('pass', 'Manifest includes at least one narrow screenshot')
-          : result('warn', 'Manifest does not include a narrow screenshot')
-      );
-
-      const invalidAspectGroups = [wideScreenshots, narrowScreenshots].filter(screenshots => {
-        if (screenshots.length === 0) return false;
-
-        const ratios = screenshots
-          .map(screenshotAspectRatio)
-          .filter(ratio => typeof ratio === 'number' && Number.isFinite(ratio));
-
-        if (ratios.length === 0) return true;
-
-        const minRatio = Math.min(...ratios);
-        const maxRatio = Math.max(...ratios);
-
-        return maxRatio / minRatio > 2.3;
-      });
-
-      results.push(
-        invalidAspectGroups.length === 0
-          ? result('pass', 'Manifest screenshots keep aspect ratios within the 2.3 limit')
-          : result('warn', 'Manifest screenshots have aspect ratios outside the 2.3 limit')
-      );
-
-      results.push(
-        manifest.screenshots.length <= 8
-          ? result('pass', 'Manifest has no more than 8 screenshots')
-          : result('warn', 'Manifest defines more than 8 screenshots')
-      );
-
-      results.push(
-        narrowScreenshots.length <= 5
-          ? result('pass', 'Manifest has no more than 5 narrow screenshots')
-          : result('warn', 'Manifest defines more than 5 narrow screenshots')
-      );
-
-      await checkAssetReachabilityBatch(
-        results,
-        'Manifest screenshot',
-        manifest.screenshots.map(screenshot => screenshot?.src),
-        manifestUrl
-      );
-    } else {
-      results.push(result('warn', 'Manifest does not define screenshots'));
-    }
-
-    if (Array.isArray(manifest.icons) && manifest.icons.length > 0) {
-      results.push(result('pass', 'Manifest defines icons'));
-
-      const hasRequiredIconFields = manifest.icons.some(
-        icon => icon && icon.src && icon.type && icon.sizes
-      );
-
-      results.push(
-        hasRequiredIconFields
-          ? result('pass', 'Manifest icons include src, type, and sizes')
-          : result('warn', 'Manifest icons do not consistently include src, type, and sizes')
-      );
-
-      const iconSizes = manifest.icons
-        .map(icon => icon && icon.sizes)
-        .filter(Boolean);
-
-      const missingRecommendedSizes = ['192x192', '384x384', '1024x1024'].filter(
-        size => !iconSizes.some(sizes => sizes.includes(size))
-      );
-
-      results.push(
-        iconSizes.some(sizes => sizes.includes('512x512'))
-          ? result('pass', 'Manifest includes a 512x512 icon')
-          : result('warn', 'Manifest does not include a 512x512 icon')
-      );
-
-      if (missingRecommendedSizes.length === 0) {
-        results.push(
-          result('pass', 'Manifest includes recommended 192x192, 384x384, and 1024x1024 icons')
-        );
-      } else {
-        results.push(
-          result(
-            'warn',
-            `Manifest is missing recommended icon sizes: ${missingRecommendedSizes.join(', ')}`
-          )
-        );
-      }
-
-      const hasMaskableIcon = manifest.icons.some(
-        icon =>
-          icon &&
-          icon.purpose === 'maskable' &&
-          typeof icon.sizes === 'string' &&
-          icon.sizes.includes('512x512')
-      );
-
-      results.push(
-        hasMaskableIcon
-          ? result('pass', 'Manifest includes a 512x512 maskable icon')
-          : result('warn', 'Manifest does not include a 512x512 maskable icon')
-      );
-
-      await checkAssetReachabilityBatch(
-        results,
-        'Manifest icon',
-        manifest.icons.map(icon => icon?.src),
-        manifestUrl
-      );
-    } else {
-      results.push(result('warn', 'Manifest does not define icons'));
-    }
-
-    if (Array.isArray(manifest.shortcuts) && manifest.shortcuts.length > 0) {
-      results.push(result('pass', 'Manifest defines shortcuts'));
-
-      const hasRequiredShortcutMembers = manifest.shortcuts.every(
-        shortcut =>
-          shortcut &&
-          typeof shortcut.name === 'string' &&
-          shortcut.name.length > 0 &&
-          typeof shortcut.url === 'string' &&
-          shortcut.url.length > 0
-      );
-
-      results.push(
-        hasRequiredShortcutMembers
-          ? result('pass', 'Manifest shortcuts include name and url')
-          : result('warn', 'Manifest shortcuts do not consistently include name and url')
-      );
-
-      const optionalShortcutMembersPresent = manifest.shortcuts.every(shortcut => {
-        if (!shortcut) return false;
-
-        const optionalKeys = ['short_name', 'description'];
-        return optionalKeys.every(key => {
-          return (
-            shortcut[key] === undefined ||
-            typeof shortcut[key] === 'string'
-          );
-        });
-      });
-
-      results.push(
-        optionalShortcutMembersPresent
-          ? result('pass', 'Manifest shortcuts optionally include short_name and description')
-          : result('warn', 'Manifest shortcuts include invalid short_name or description values')
-      );
-
-      const shortcutsWithIcons = manifest.shortcuts.filter(shortcut => Array.isArray(shortcut?.icons));
-      if (shortcutsWithIcons.length > 0) {
-        const hasValidShortcutIcons = shortcutsWithIcons.every(shortcut =>
-          hasValidShortcutIconSizes(shortcut.icons)
-        );
-
-        results.push(
-          hasValidShortcutIcons
-          ? result('pass', 'Manifest shortcut icons include src and sizes')
-          : result('warn', 'Manifest shortcut icons do not consistently include src and sizes')
-        );
-
-        for (const shortcut of shortcutsWithIcons) {
-          await checkAssetReachabilityBatch(
-            results,
-            'Manifest shortcut icon',
-            shortcut.icons.map(icon => icon?.src),
-            manifestUrl
-          );
-        }
-      }
-    } else {
-      results.push(result('warn', 'Manifest does not define shortcuts'));
-    }
-
-    if (manifest.share_target && typeof manifest.share_target === 'object') {
-      results.push(result('pass', 'Manifest defines share_target'));
-
-      const shareTarget = manifest.share_target;
-      const isRelativeAction =
-        typeof shareTarget.action === 'string' &&
-        shareTarget.action.length > 0 &&
-        !/^https?:\/\//i.test(shareTarget.action);
-
-      results.push(
-        isRelativeAction
-          ? result('pass', 'Manifest share_target action is a relative URL')
-          : result('warn', 'Manifest share_target action is missing or is not a relative URL')
-      );
-
-      const hasValidMethod =
-        typeof shareTarget.method === 'string' &&
-        ['GET', 'POST'].includes(shareTarget.method.toUpperCase());
-
-      results.push(
-        hasValidMethod
-          ? result('pass', `Manifest share_target method is valid: ${shareTarget.method.toUpperCase()}`)
-          : result('warn', 'Manifest share_target method must be GET or POST')
-      );
-
-      if (String(shareTarget.method).toUpperCase() === 'POST') {
-        results.push(
-          shareTarget.enctype === 'multipart/form-data'
-            ? result('pass', 'Manifest share_target enctype is multipart/form-data')
-            : result('warn', 'Manifest share_target enctype must be multipart/form-data when method is POST')
-        );
-      }
-
-      if (shareTarget.params && typeof shareTarget.params === 'object') {
-        const allowedParamKeys = ['title', 'text', 'url', 'files'];
-        const invalidParamKeys = Object.keys(shareTarget.params).filter(
-          key => !allowedParamKeys.includes(key)
-        );
-
-        results.push(
-          invalidParamKeys.length === 0
-            ? result('pass', 'Manifest share_target params contain supported members')
-            : result('warn', `Manifest share_target params contain unsupported members: ${invalidParamKeys.join(', ')}`)
-        );
-
-        if (Array.isArray(shareTarget.params.files) && shareTarget.params.files.length > 0) {
-          const hasValidFiles = hasValidShareTargetFiles(shareTarget.params.files);
-
-          results.push(
-            hasValidFiles
-              ? result('pass', 'Manifest share_target files include name and accept')
-              : result('warn', 'Manifest share_target files do not consistently include valid name and accept values')
-          );
-        }
-      } else {
-        results.push(result('warn', 'Manifest share_target does not define params'));
-      }
-    } else {
-      results.push(result('warn', 'Manifest does not define share_target'));
-    }
-
-    if (Array.isArray(manifest.file_handlers) && manifest.file_handlers.length > 0) {
-      results.push(result('pass', 'Manifest defines file_handlers'));
-
-      const hasValidFileHandlers = manifest.file_handlers.every(
-        fileHandler =>
-          fileHandler &&
-          typeof fileHandler.action === 'string' &&
-          fileHandler.action.length > 0 &&
-          !/^https?:\/\//i.test(fileHandler.action) &&
-          hasValidFileHandlersAccept(fileHandler.accept)
-      );
-
-      results.push(
-        hasValidFileHandlers
-          ? result('pass', 'Manifest file_handlers include a relative action and valid accept mappings')
-          : result('warn', 'Manifest file_handlers do not consistently include a relative action and valid accept mappings')
-      );
-    } else {
-      results.push(result('warn', 'Manifest does not define file_handlers'));
-    }
-
-    if (typeof manifest.handle_links === 'string' && manifest.handle_links.length > 0) {
-      results.push(
-        ['preferred', 'not-preferred', 'auto'].includes(manifest.handle_links)
-          ? result('pass', `Manifest handle_links is valid: ${manifest.handle_links}`)
-          : result('warn', 'Manifest handle_links must be preferred, not-preferred, or auto')
-      );
-    } else {
-      results.push(result('warn', 'Manifest does not define handle_links'));
-    }
+    results.push(...await checkManifestMembers(manifest, manifestUrl));
   } catch (error) {
     results.push(result('fail', `Could not read manifest: ${error.message}`));
   }
