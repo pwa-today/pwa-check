@@ -151,6 +151,42 @@ const hasValidShortcutIconSizes = icons => {
   );
 };
 
+const hasValidShareTargetFiles = files => {
+  return files.every(
+    file =>
+      file &&
+      typeof file.name === 'string' &&
+      file.name.length > 0 &&
+      Array.isArray(file.accept) &&
+      file.accept.every(
+        accept =>
+          typeof accept === 'string' &&
+          accept.length > 0 &&
+          (/^[a-z0-9-]+\/[a-z0-9-+.]+$/i.test(accept) || /^\.[a-z0-9]+$/i.test(accept))
+      )
+  );
+};
+
+const hasValidFileHandlersAccept = accept => {
+  if (!accept || typeof accept !== 'object' || Array.isArray(accept)) {
+    return false;
+  }
+
+  return Object.entries(accept).every(([mimeType, extensions]) => {
+    const hasValidMimeType = /^[a-z0-9!#$&^_.+-]+\/(?:\*|[a-z0-9!#$&^_.+-]+)$/i.test(mimeType);
+    const hasValidExtensions =
+      typeof extensions === 'string'
+        ? /^\.[a-z0-9]+$/i.test(extensions)
+        : Array.isArray(extensions) &&
+          extensions.length > 0 &&
+          extensions.every(
+            extension => typeof extension === 'string' && /^\.[a-z0-9]+$/i.test(extension)
+          );
+
+    return hasValidMimeType && hasValidExtensions;
+  });
+};
+
 const isAssetReachable = async assetUrl => {
   try {
     const response = await fetch(assetUrl, { redirect: 'follow' });
@@ -558,6 +594,98 @@ export const checkManifest = async (html, pageUrl) => {
       }
     } else {
       results.push(result('warn', 'Manifest does not define shortcuts'));
+    }
+
+    if (manifest.share_target && typeof manifest.share_target === 'object') {
+      results.push(result('pass', 'Manifest defines share_target'));
+
+      const shareTarget = manifest.share_target;
+      const isRelativeAction =
+        typeof shareTarget.action === 'string' &&
+        shareTarget.action.length > 0 &&
+        !/^https?:\/\//i.test(shareTarget.action);
+
+      results.push(
+        isRelativeAction
+          ? result('pass', 'Manifest share_target action is a relative URL')
+          : result('warn', 'Manifest share_target action is missing or is not a relative URL')
+      );
+
+      const hasValidMethod =
+        typeof shareTarget.method === 'string' &&
+        ['GET', 'POST'].includes(shareTarget.method.toUpperCase());
+
+      results.push(
+        hasValidMethod
+          ? result('pass', `Manifest share_target method is valid: ${shareTarget.method.toUpperCase()}`)
+          : result('warn', 'Manifest share_target method must be GET or POST')
+      );
+
+      if (String(shareTarget.method).toUpperCase() === 'POST') {
+        results.push(
+          shareTarget.enctype === 'multipart/form-data'
+            ? result('pass', 'Manifest share_target enctype is multipart/form-data')
+            : result('warn', 'Manifest share_target enctype must be multipart/form-data when method is POST')
+        );
+      }
+
+      if (shareTarget.params && typeof shareTarget.params === 'object') {
+        const allowedParamKeys = ['title', 'text', 'url', 'files'];
+        const invalidParamKeys = Object.keys(shareTarget.params).filter(
+          key => !allowedParamKeys.includes(key)
+        );
+
+        results.push(
+          invalidParamKeys.length === 0
+            ? result('pass', 'Manifest share_target params contain supported members')
+            : result('warn', `Manifest share_target params contain unsupported members: ${invalidParamKeys.join(', ')}`)
+        );
+
+        if (Array.isArray(shareTarget.params.files) && shareTarget.params.files.length > 0) {
+          const hasValidFiles = hasValidShareTargetFiles(shareTarget.params.files);
+
+          results.push(
+            hasValidFiles
+              ? result('pass', 'Manifest share_target files include name and accept')
+              : result('warn', 'Manifest share_target files do not consistently include valid name and accept values')
+          );
+        }
+      } else {
+        results.push(result('warn', 'Manifest share_target does not define params'));
+      }
+    } else {
+      results.push(result('warn', 'Manifest does not define share_target'));
+    }
+
+    if (Array.isArray(manifest.file_handlers) && manifest.file_handlers.length > 0) {
+      results.push(result('pass', 'Manifest defines file_handlers'));
+
+      const hasValidFileHandlers = manifest.file_handlers.every(
+        fileHandler =>
+          fileHandler &&
+          typeof fileHandler.action === 'string' &&
+          fileHandler.action.length > 0 &&
+          !/^https?:\/\//i.test(fileHandler.action) &&
+          hasValidFileHandlersAccept(fileHandler.accept)
+      );
+
+      results.push(
+        hasValidFileHandlers
+          ? result('pass', 'Manifest file_handlers include a relative action and valid accept mappings')
+          : result('warn', 'Manifest file_handlers do not consistently include a relative action and valid accept mappings')
+      );
+    } else {
+      results.push(result('warn', 'Manifest does not define file_handlers'));
+    }
+
+    if (typeof manifest.handle_links === 'string' && manifest.handle_links.length > 0) {
+      results.push(
+        ['preferred', 'not-preferred', 'auto'].includes(manifest.handle_links)
+          ? result('pass', `Manifest handle_links is valid: ${manifest.handle_links}`)
+          : result('warn', 'Manifest handle_links must be preferred, not-preferred, or auto')
+      );
+    } else {
+      results.push(result('warn', 'Manifest does not define handle_links'));
     }
   } catch (error) {
     results.push(result('fail', `Could not read manifest: ${error.message}`));
