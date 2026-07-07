@@ -117,6 +117,10 @@ Run the test suite with:
 npm test
 ```
 
+## License
+
+ISC. See [`LICENSE`](LICENSE).
+
 ## Notes
 
 - The checker uses heuristics for dynamic behavior, such as manifests or service workers injected by JavaScript.
