@@ -98,7 +98,7 @@ const findInlineScriptSources = html => {
   return [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]);
 };
 
-export const checkIosSplashScreens = async (html, pageUrl) => {
+export const checkIosSplashScreens = async (html, pageUrl, fetchOptions = {}) => {
   const results = [];
   const scriptUrls = findScriptUrls(html, pageUrl);
   const sources = [{ source: html, isHtml: true }];
@@ -114,7 +114,7 @@ export const checkIosSplashScreens = async (html, pageUrl) => {
   for (const scriptUrl of scriptUrls) {
     try {
       sources.push({
-        source: await fetchText(scriptUrl),
+        source: await fetchText(scriptUrl, fetchOptions),
         isHtml: false
       });
     } catch {}

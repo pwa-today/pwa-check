@@ -1,4 +1,4 @@
-import { fetchText } from '../utils/fetch-text.js';
+import { fetchText, fetchWithTimeout } from '../utils/fetch-text.js';
 import { findScriptUrls } from '../utils/find-script-urls.js';
 import { result } from '../utils/result.js';
 import { resolveUrl } from '../utils/url.js';
@@ -17,8 +17,8 @@ export const findManifestUrl = (source, pageUrl) => {
   return resolveUrl(pageUrl, hrefMatch[1]);
 };
 
-export const loadManifest = async manifestUrl => {
-  return JSON.parse(await fetchText(manifestUrl));
+export const loadManifest = async (manifestUrl, fetchOptions = {}) => {
+  return JSON.parse(await fetchText(manifestUrl, fetchOptions));
 };
 
 const findManifestUrlInScript = (source, pageUrl) => {
@@ -191,16 +191,16 @@ const hasValidFileHandlersAccept = accept => {
   });
 };
 
-const isAssetReachable = async assetUrl => {
+const isAssetReachable = async (assetUrl, fetchOptions = {}) => {
   try {
-    const response = await fetch(assetUrl, { redirect: 'follow' });
+    const response = await fetchWithTimeout(assetUrl, fetchOptions);
     return response.ok;
   } catch {
     return false;
   }
 };
 
-const checkAssetReachabilityBatch = async (results, label, assets, baseUrl) => {
+const checkAssetReachabilityBatch = async (results, label, assets, baseUrl, fetchOptions = {}) => {
   if (!baseUrl) {
     return;
   }
@@ -209,7 +209,7 @@ const checkAssetReachabilityBatch = async (results, label, assets, baseUrl) => {
     .filter(assetUrl => typeof assetUrl === 'string' && assetUrl.length > 0)
     .map(async assetUrl => {
       const resolvedUrl = resolveUrl(baseUrl, assetUrl);
-      const reachable = await isAssetReachable(resolvedUrl);
+      const reachable = await isAssetReachable(resolvedUrl, fetchOptions);
 
       return reachable
         ? result('pass', `${label} is reachable: ${resolvedUrl}`)
@@ -237,7 +237,206 @@ const screenshotAspectRatio = screenshot => {
   return Math.max(width, height) / Math.min(width, height);
 };
 
-export const checkManifestMembers = async (manifest, manifestUrl = null) => {
+const hasManifestInstallabilityCriteria = manifest => {
+  const hasName = typeof manifest.short_name === 'string' && manifest.short_name.length > 0;
+  const hasDisplay = ['fullscreen', 'standalone', 'minimal-ui', 'window-controls-overlay'].includes(
+    manifest.display
+  );
+  const hasStartUrl = typeof manifest.start_url === 'string' && manifest.start_url.length > 0;
+  const hasPreferRelatedApplications =
+    manifest.prefer_related_applications === undefined ||
+    manifest.prefer_related_applications === false;
+
+  const iconSizes = Array.isArray(manifest.icons)
+    ? manifest.icons
+        .map(icon => (typeof icon?.sizes === 'string' ? icon.sizes.split(/\s+/) : []))
+        .flat()
+    : [];
+  const has192Icon = iconSizes.includes('192x192');
+  const has512Icon = iconSizes.includes('512x512');
+
+  return (
+    hasName &&
+    hasDisplay &&
+    hasStartUrl &&
+    hasPreferRelatedApplications &&
+    has192Icon &&
+    has512Icon
+  );
+};
+
+const cssNamedColors = new Set([
+  'aliceblue',
+  'antiquewhite',
+  'aqua',
+  'aquamarine',
+  'azure',
+  'beige',
+  'bisque',
+  'black',
+  'blanchedalmond',
+  'blue',
+  'blueviolet',
+  'brown',
+  'burlywood',
+  'cadetblue',
+  'chartreuse',
+  'chocolate',
+  'coral',
+  'cornflowerblue',
+  'cornsilk',
+  'crimson',
+  'cyan',
+  'darkblue',
+  'darkcyan',
+  'darkgoldenrod',
+  'darkgray',
+  'darkgreen',
+  'darkgrey',
+  'darkkhaki',
+  'darkmagenta',
+  'darkolivegreen',
+  'darkorange',
+  'darkorchid',
+  'darkred',
+  'darksalmon',
+  'darkseagreen',
+  'darkslateblue',
+  'darkslategray',
+  'darkslategrey',
+  'darkturquoise',
+  'darkviolet',
+  'deeppink',
+  'deepskyblue',
+  'dimgray',
+  'dimgrey',
+  'dodgerblue',
+  'firebrick',
+  'floralwhite',
+  'forestgreen',
+  'fuchsia',
+  'gainsboro',
+  'ghostwhite',
+  'gold',
+  'goldenrod',
+  'gray',
+  'green',
+  'greenyellow',
+  'grey',
+  'honeydew',
+  'hotpink',
+  'indianred',
+  'indigo',
+  'ivory',
+  'khaki',
+  'lavender',
+  'lavenderblush',
+  'lawngreen',
+  'lemonchiffon',
+  'lightblue',
+  'lightcoral',
+  'lightcyan',
+  'lightgoldenrodyellow',
+  'lightgray',
+  'lightgreen',
+  'lightgrey',
+  'lightpink',
+  'lightsalmon',
+  'lightseagreen',
+  'lightskyblue',
+  'lightslategray',
+  'lightslategrey',
+  'lightsteelblue',
+  'lightyellow',
+  'lime',
+  'limegreen',
+  'linen',
+  'magenta',
+  'maroon',
+  'mediumaquamarine',
+  'mediumblue',
+  'mediumorchid',
+  'mediumpurple',
+  'mediumseagreen',
+  'mediumslateblue',
+  'mediumspringgreen',
+  'mediumturquoise',
+  'mediumvioletred',
+  'midnightblue',
+  'mintcream',
+  'mistyrose',
+  'moccasin',
+  'navajowhite',
+  'navy',
+  'oldlace',
+  'olive',
+  'olivedrab',
+  'orange',
+  'orangered',
+  'orchid',
+  'palegoldenrod',
+  'palegreen',
+  'paleturquoise',
+  'palevioletred',
+  'papayawhip',
+  'peachpuff',
+  'peru',
+  'pink',
+  'plum',
+  'powderblue',
+  'purple',
+  'rebeccapurple',
+  'red',
+  'rosybrown',
+  'royalblue',
+  'saddlebrown',
+  'salmon',
+  'sandybrown',
+  'seagreen',
+  'seashell',
+  'sienna',
+  'silver',
+  'skyblue',
+  'slateblue',
+  'slategray',
+  'slategrey',
+  'snow',
+  'springgreen',
+  'steelblue',
+  'tan',
+  'teal',
+  'thistle',
+  'tomato',
+  'turquoise',
+  'violet',
+  'wheat',
+  'white',
+  'whitesmoke',
+  'yellow',
+  'yellowgreen'
+]);
+
+const isValidColorValue = value => {
+  if (typeof value !== 'string' || value.length === 0) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const hexColor = /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i;
+  const rgbColor =
+    /^rgb\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i;
+  const modernRgbColor =
+    /^rgb\(\s*(?:\d{1,3}\s+){2}\d{1,3}(?:\s*\/\s*(?:0|1|0?\.\d+))?\s*\)$/i;
+
+  return (
+    hexColor.test(normalized) ||
+    rgbColor.test(normalized) ||
+    modernRgbColor.test(normalized) ||
+    cssNamedColors.has(normalized)
+  );
+};
+
+export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOptions = {}) => {
   const results = [];
 
   results.push(
@@ -298,6 +497,33 @@ export const checkManifestMembers = async (manifest, manifestUrl = null) => {
       ? result('pass', `Manifest has orientation member: ${manifest.orientation}`)
       : result('warn', 'Manifest does not have orientation member')
   );
+
+  if (typeof manifest.theme_color === 'string' && manifest.theme_color.length > 0) {
+    results.push(result('pass', `Manifest has theme_color member: ${manifest.theme_color}`));
+    results.push(
+      isValidColorValue(manifest.theme_color)
+        ? result('pass', `Manifest theme_color is a valid color: ${manifest.theme_color}`)
+        : result('warn', 'Manifest theme_color must be a valid color')
+    );
+  } else {
+    results.push(result('warn', 'Manifest does not have theme_color member'));
+  }
+
+  if (typeof manifest.background_color === 'string' && manifest.background_color.length > 0) {
+    results.push(
+      result('pass', `Manifest has background_color member: ${manifest.background_color}`)
+    );
+    results.push(
+      isValidColorValue(manifest.background_color)
+        ? result(
+            'pass',
+            `Manifest background_color is a valid color: ${manifest.background_color}`
+          )
+        : result('warn', 'Manifest background_color must be a valid color')
+    );
+  } else {
+    results.push(result('warn', 'Manifest does not have background_color member'));
+  }
 
   if (Array.isArray(manifest.screenshots) && manifest.screenshots.length > 0) {
     results.push(result('pass', 'Manifest defines screenshots'));
@@ -406,7 +632,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null) => {
       results,
       'Manifest screenshot',
       manifest.screenshots.map(screenshot => screenshot?.src),
-      manifestUrl
+      manifestUrl,
+      fetchOptions
     );
   } else {
     results.push(result('warn', 'Manifest does not define screenshots'));
@@ -452,29 +679,42 @@ export const checkManifestMembers = async (manifest, manifestUrl = null) => {
       );
     }
 
-    const hasMaskableIcon = manifest.icons.some(
-      icon =>
-        icon &&
-        icon.purpose === 'maskable' &&
-        typeof icon.sizes === 'string' &&
-        icon.sizes.includes('512x512')
-    );
+    const canonicalIconSizes = ['192x192', '384x384', '512x512', '1024x1024'];
+    const missingMaskableSizes = canonicalIconSizes.filter(size => {
+      return !manifest.icons.some(
+        icon =>
+          icon &&
+          icon.purpose === 'maskable' &&
+          typeof icon.sizes === 'string' &&
+          icon.sizes.split(/\s+/).includes(size)
+      );
+    });
 
     results.push(
-      hasMaskableIcon
-        ? result('pass', 'Manifest includes a 512x512 maskable icon')
-        : result('warn', 'Manifest does not include a 512x512 maskable icon')
+      missingMaskableSizes.length === 0
+        ? result('pass', 'Manifest includes maskable icons for each icon size')
+        : result(
+            'warn',
+            `Manifest is missing maskable icons for these sizes: ${missingMaskableSizes.join(', ')}`
+          )
     );
 
     await checkAssetReachabilityBatch(
       results,
       'Manifest icon',
       manifest.icons.map(icon => icon?.src),
-      manifestUrl
+      manifestUrl,
+      fetchOptions
     );
   } else {
     results.push(result('warn', 'Manifest does not define icons'));
   }
+
+  results.push(
+    hasManifestInstallabilityCriteria(manifest)
+      ? result('pass', 'PWA meets installability criteria')
+      : result('warn', 'PWA does not meet installability criteria')
+  );
 
   if (Array.isArray(manifest.shortcuts) && manifest.shortcuts.length > 0) {
     results.push(result('pass', 'Manifest defines shortcuts'));
@@ -529,7 +769,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null) => {
           results,
           'Manifest shortcut icon',
           shortcut.icons.map(icon => icon?.src),
-          manifestUrl
+          manifestUrl,
+          fetchOptions
         );
       }
     }
@@ -632,7 +873,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null) => {
   return results;
 };
 
-export const checkManifest = async (html, pageUrl) => {
+export const checkManifest = async (html, pageUrl, fetchOptions = {}) => {
   const results = [];
   const scriptUrls = findScriptUrls(html, pageUrl);
   let manifestUrl = findManifestUrl(html, pageUrl);
@@ -664,7 +905,7 @@ export const checkManifest = async (html, pageUrl) => {
   if (!manifestUrl) {
     for (const scriptUrl of scriptUrls) {
       try {
-        const scriptSource = await fetchText(scriptUrl);
+        const scriptSource = await fetchText(scriptUrl, fetchOptions);
         const scriptManifestUrl = findManifestUrlInScript(scriptSource, scriptUrl);
 
         if (scriptManifestUrl) {
@@ -706,9 +947,9 @@ export const checkManifest = async (html, pageUrl) => {
   }
 
   try {
-    const manifest = await loadManifest(manifestUrl);
+    const manifest = await loadManifest(manifestUrl, fetchOptions);
     results.push(result('pass', 'Manifest is valid JSON'));
-    results.push(...await checkManifestMembers(manifest, manifestUrl));
+    results.push(...await checkManifestMembers(manifest, manifestUrl, fetchOptions));
   } catch (error) {
     results.push(result('fail', `Could not read manifest: ${error.message}`));
   }

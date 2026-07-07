@@ -3,12 +3,137 @@ import { result } from '../utils/result.js';
 import { resolveUrl } from '../utils/url.js';
 import { findScriptUrls } from '../utils/find-script-urls.js';
 
-export const findServiceWorkerUrls = (html, pageUrl) => {
-  const matches = [...html.matchAll(
-    /navigator\.serviceWorker\.register\s*\(\s*['"`]([^'"`]+)['"`]/g
-  )];
+export const findServiceWorkerUrls = (html, pageUrl, resolveBaseUrl = pageUrl) => {
+  const matches = [
+    ...html.matchAll(
+      /navigator\.serviceWorker\.register\s*\(\s*((?:new\s+URL\s*\([\s\S]{0,200}?\)\.href)|(?:['"][^'"]+['"])|(?:[A-Za-z_$][\w$]*))/g
+    )
+  ];
 
-  return matches.map(match => resolveUrl(pageUrl, match[1]));
+  return matches
+    .map(match =>
+      resolveServiceWorkerRegistrationUrl(html, resolveBaseUrl, match[1], match.index ?? 0)
+    )
+    .filter(Boolean);
+};
+
+const resolveServiceWorkerRegistrationUrl = (source, pageUrl, expression, index = 0) => {
+  const trimmedExpression = expression.trim().replace(/[),;]+$/, '');
+
+  const quotedMatch = trimmedExpression.match(/^['"`]([^'"`]+)['"`]$/);
+  if (quotedMatch) {
+    return resolveUrl(pageUrl, quotedMatch[1]);
+  }
+
+  const functionCallMatch = trimmedExpression.match(
+    /^(?:await\s+)?(?:[A-Za-z_$][\w$]*\.)?([A-Za-z_$][\w$]*)\s*\(\s*\)$/
+  );
+  if (functionCallMatch) {
+    const resolvedFunctionUrl = resolveServiceWorkerFunctionUrl(
+      source,
+      pageUrl,
+      functionCallMatch[1]
+    );
+
+    if (resolvedFunctionUrl) {
+      return resolvedFunctionUrl;
+    }
+  }
+
+  const identifierMatch = trimmedExpression.match(/^[A-Za-z_$][\w$]*$/);
+  if (identifierMatch) {
+    const identifier = identifierMatch[0];
+    const declarationSource = source.slice(0, index);
+    const declarationRegex = new RegExp(
+      String.raw`(?:const|let|var)\s+${identifier}\s*=\s*([^\n;]+)`,
+      'g'
+    );
+    let declarationMatch = null;
+
+    for (const match of declarationSource.matchAll(declarationRegex)) {
+      declarationMatch = match;
+    }
+
+    if (declarationMatch) {
+      const resolvedDeclaration = resolveServiceWorkerRegistrationUrl(
+        declarationSource,
+        pageUrl,
+        declarationMatch[1].trim(),
+        declarationMatch.index ?? 0
+      );
+
+      if (resolvedDeclaration) {
+        return resolvedDeclaration;
+      }
+    }
+
+    const newUrlMatch = source.match(
+      new RegExp(
+        String.raw`(?:const|let|var)\s+${identifier}\s*=\s*new\s+URL\s*\(\s*(['"])([^'"]+)\1\s*,\s*import\.meta\.url\s*\)\.href`
+      )
+    );
+
+    if (newUrlMatch) {
+      return resolveUrl(pageUrl, newUrlMatch[2]);
+    }
+  }
+
+  const newUrlMatch = trimmedExpression.match(
+    /^new\s+URL\s*\(\s*(['"])([^'"]+)\1\s*,\s*import\.meta\.url\s*\)\.href$/
+  );
+  if (newUrlMatch) {
+    return resolveUrl(pageUrl, newUrlMatch[2]);
+  }
+
+  return null;
+};
+
+const resolveServiceWorkerFunctionUrl = (source, pageUrl, functionName) => {
+  const functionMatch = source.match(
+    new RegExp(
+      String.raw`(?:this\.)?${functionName}\s*=\s*async\s+function\s*\(\)\s*\{([\s\S]*?)\};`
+    )
+  );
+
+  if (!functionMatch) {
+    return null;
+  }
+
+  const body = functionMatch[1];
+
+  const directUrlMatch = body.match(
+    /return\s+window\.location\.origin\s*\+\s*["']\/([^"']+)["']/
+  );
+  if (directUrlMatch) {
+    return resolveUrl(pageUrl, `/${directUrlMatch[1]}`);
+  }
+
+  const literalVariableMatch = body.match(
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*['"]([^'"`]+)['"]/
+  );
+  if (literalVariableMatch) {
+    const variableName = literalVariableMatch[1];
+    const literalPath = literalVariableMatch[2];
+    const usesLiteralVariable = new RegExp(
+      String.raw`window\.location\.origin\s*\+\s*["']\/["']\s*\+\s*${variableName}\b`
+    ).test(body);
+
+    if (usesLiteralVariable) {
+      return resolveUrl(pageUrl, `/${literalPath}`);
+    }
+  }
+
+  const defaultPathMatch = body.match(/\|\|\s*["']([^"']+)["']/);
+  const builtOriginMatch = body.match(
+    /window\.location\.origin\s*\+\s*["']\/["']\s*\+\s*[A-Za-z_$][\w$]*/
+  );
+  const returnsHref = /return\s+[A-Za-z_$][\w$]*\.href/.test(body);
+
+  if (defaultPathMatch && builtOriginMatch && returnsHref) {
+    return resolveUrl(pageUrl, `/${defaultPathMatch[1]}`);
+  }
+
+  return null;
 };
 
 const hasServiceWorkerRegistrationHint = source => {
@@ -109,14 +234,18 @@ export const hasNotificationClickHandler = swCode => {
   );
 };
 
-export const collectServiceWorkerSources = async (entryUrl, seen = new Set()) => {
+export const collectServiceWorkerSources = async (
+  entryUrl,
+  seen = new Set(),
+  fetchOptions = {}
+) => {
   if (!entryUrl || seen.has(entryUrl)) {
     return [];
   }
 
   seen.add(entryUrl);
 
-  const source = await fetchText(entryUrl);
+  const source = await fetchText(entryUrl, fetchOptions);
   const sources = [{ source, baseUrl: entryUrl }];
   const importUrls = [
     ...findServiceWorkerImportUrls(source, entryUrl),
@@ -125,32 +254,30 @@ export const collectServiceWorkerSources = async (entryUrl, seen = new Set()) =>
 
   for (const importUrl of importUrls) {
     try {
-      sources.push(...await collectServiceWorkerSources(importUrl, seen));
+      sources.push(...await collectServiceWorkerSources(importUrl, seen, fetchOptions));
     } catch {}
   }
 
   return sources;
 };
 
-export const checkServiceWorker = async (html, pageUrl) => {
+export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
   const results = [];
 
   const scriptUrls = findScriptUrls(html, pageUrl);
-  const sources = [
-    { source: html, baseUrl: pageUrl }
-  ];
+  const sources = [{ source: html, baseUrl: pageUrl }];
 
   for (const scriptUrl of scriptUrls) {
     try {
       sources.push({
-        source: await fetchText(scriptUrl),
+        source: await fetchText(scriptUrl, fetchOptions),
         baseUrl: scriptUrl
       });
     } catch {}
   }
 
-  const serviceWorkerUrls = sources.flatMap(({ source, baseUrl }) =>
-    findServiceWorkerUrls(source, baseUrl)
+  const serviceWorkerUrls = sources.flatMap(({ source }) =>
+    findServiceWorkerUrls(source, pageUrl, pageUrl)
   );
 
   if (serviceWorkerUrls.length === 0) {
@@ -161,8 +288,8 @@ export const checkServiceWorker = async (html, pageUrl) => {
     if (hasRegistrationHint) {
       results.push(
         result(
-          'pass',
-          'Service worker registration is present, but the script does not expose a static URL'
+          'warn',
+          'Service worker registration is present, but the script does not expose a static URL; subsequent service worker checks could not be run'
         )
       );
 
@@ -179,7 +306,7 @@ export const checkServiceWorker = async (html, pageUrl) => {
     result('pass', `Service worker registration found: ${serviceWorkerUrls[0]}`)
   );
 
-  const swSources = await collectServiceWorkerSources(serviceWorkerUrls[0]);
+  const swSources = await collectServiceWorkerSources(serviceWorkerUrls[0], new Set(), fetchOptions);
   const swCode = swSources.map(({ source }) => source).join('\n');
   const hasCacheHandling = swSources.some(({ source }) => cachesAssets(source)) || cachesAssets(swCode);
 

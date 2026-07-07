@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { fetchText } from '../src/utils/fetch-text.js';
+
+test('fetchText sends browser-like headers', async () => {
+  const originalFetch = global.fetch;
+  let capturedOptions;
+
+  global.fetch = async (url, options) => {
+    capturedOptions = options;
+
+    return new Response('ok', {
+      status: 200
+    });
+  };
+
+  try {
+    await fetchText('https://example.com/');
+
+    assert.equal(capturedOptions.redirect, 'follow');
+    assert.equal(capturedOptions.headers['user-agent'].includes('pwa-check'), false);
+    assert.equal(
+      capturedOptions.headers['user-agent'],
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+    );
+    assert.equal(
+      capturedOptions.headers.accept,
+      'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('fetchText times out when the request takes too long', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url, options) => {
+    return await new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+      });
+    });
+  };
+
+  try {
+    await assert.rejects(
+      fetchText('https://example.com/', { timeoutMs: 1 }),
+      /Request timed out after 1ms/
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
