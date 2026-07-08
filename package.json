@@ -1,10 +1,10 @@
 {
   "name": "@pwa-today/pwa-check",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "An automated PWA health check tool",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.org/pwa-today/pwa-check.git"
+    "url": "https://github.com/pwa-today/pwa-check"
   },
   "scripts": {
     "test": "node --test tests/*.test.js"
