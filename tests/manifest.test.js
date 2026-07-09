@@ -321,6 +321,7 @@ test('share_target member is required', async () => {
   const results = await checkManifestMembers(manifest);
 
   assert.ok(hasResult(results, 'warn', 'Manifest does not define share_target'));
+  assert.ok(results.some(entry => entry.code === 'manifest.share-target.missing'));
 });
 
 test('file_handlers member is required', async () => {
@@ -330,6 +331,7 @@ test('file_handlers member is required', async () => {
   const results = await checkManifestMembers(manifest);
 
   assert.ok(hasResult(results, 'warn', 'Manifest does not define file_handlers'));
+  assert.ok(results.some(entry => entry.code === 'manifest.file-handlers.missing'));
 });
 
 test('handle_links member must use a supported value', async () => {

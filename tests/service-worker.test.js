@@ -8,6 +8,7 @@ import {
   hasActivateHandler,
   hasFetchHandler,
   hasInstallHandler,
+  hasPushHandler,
   findServiceWorkerImportUrls,
   findServiceWorkerDependencyUrls,
   findServiceWorkerUrls
@@ -134,8 +135,257 @@ test('Workbox precache controller class counts as caching assets', () => {
 
 test('plain service worker listeners still count', () => {
   assert.equal(hasFetchHandler("self.addEventListener('fetch', event => {});"), true);
-  assert.equal(hasInstallHandler("self.addEventListener('install', event => {});"), true);
-  assert.equal(hasActivateHandler("self.addEventListener('activate', event => {});"), true);
+  assert.equal(
+    hasInstallHandler("self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); });"),
+    true
+  );
+  assert.equal(
+    hasActivateHandler("self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); });"),
+    true
+  );
+  assert.equal(
+    hasPushHandler("self.addEventListener('push', event => { event.waitUntil(Promise.resolve()); });"),
+    true
+  );
+});
+
+test('event handlers without waitUntil do not count for install activate or push', () => {
+  assert.equal(hasInstallHandler("self.addEventListener('install', event => {});"), false);
+  assert.equal(hasActivateHandler("self.addEventListener('activate', event => {});"), false);
+  assert.equal(hasPushHandler("self.addEventListener('push', event => {});"), false);
+});
+
+test('minified handler parameter names still count when waitUntil is called', () => {
+  assert.equal(
+    hasInstallHandler("self.addEventListener('install', function(e) { e.waitUntil(Promise.resolve()); });"),
+    true
+  );
+  assert.equal(
+    hasActivateHandler("self.addEventListener('activate', async function(e) { e.waitUntil(Promise.resolve()); });"),
+    true
+  );
+  assert.equal(
+    hasPushHandler("self.addEventListener('push', async e => { e.waitUntil(Promise.resolve()); });"),
+    true
+  );
+});
+
+test('named handler variables still count when waitUntil is called', () => {
+  assert.equal(
+    hasInstallHandler("const installHandler = e => { e.waitUntil(Promise.resolve()); }; self.addEventListener('install', installHandler);"),
+    true
+  );
+  assert.equal(
+    hasActivateHandler("const activateHandler = function(e) { e.waitUntil(Promise.resolve()); }; self.addEventListener('activate', activateHandler);"),
+    true
+  );
+});
+
+test('checkServiceWorker reports push handlers without waitUntil separately', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async url => {
+    if (url === 'https://example.com/') {
+      return new Response(
+        '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/registerSW.js') {
+      return new Response(
+        "if('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }",
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/sw.js') {
+      return new Response(
+        "self.addEventListener('push', event => { console.log(event); });",
+        { status: 200 }
+      );
+    }
+
+    return new Response('', { status: 404 });
+  };
+
+  try {
+    const results = await checkServiceWorker(
+      '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+      'https://example.com/'
+    );
+
+    assert.ok(
+      results.some(
+        entry =>
+          entry.status === 'pass' &&
+          entry.message === 'Service worker has push event handler'
+      )
+    );
+    assert.ok(
+      results.some(
+        entry =>
+          entry.status === 'warn' &&
+          entry.code === 'service-worker.push.wait-until' &&
+          entry.message === 'Service worker has push event handler, but it does not call waitUntil'
+      )
+    );
+    assert.ok(
+      !results.some(
+        entry =>
+          entry.status === 'warn' &&
+          entry.message === 'Service worker has no push event handler'
+      )
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('checkServiceWorker warns when notificationclick is missing', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async url => {
+    if (url === 'https://example.com/') {
+      return new Response(
+        '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/registerSW.js') {
+      return new Response(
+        "if('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }",
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/sw.js') {
+      return new Response(
+        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('push', event => { event.waitUntil(Promise.resolve()); });",
+        { status: 200 }
+      );
+    }
+
+    return new Response('', { status: 404 });
+  };
+
+  try {
+    const results = await checkServiceWorker(
+      '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+      'https://example.com/'
+    );
+
+    assert.ok(
+      results.some(
+        entry =>
+          entry.status === 'warn' &&
+          entry.code === 'service-worker.notificationclick.missing' &&
+          entry.message === 'Service worker has no notificationclick event handler'
+      )
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('checkServiceWorker warns when install uses skipWaiting and activate uses clients.claim', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async url => {
+    if (url === 'https://example.com/') {
+      return new Response(
+        '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/registerSW.js') {
+      return new Response(
+        "if('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }",
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/sw.js') {
+      return new Response(
+        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); self.skipWaiting(); }); self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); self.clients.claim(); });",
+        { status: 200 }
+      );
+    }
+
+    return new Response('', { status: 404 });
+  };
+
+  try {
+    const results = await checkServiceWorker(
+      '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+      'https://example.com/'
+    );
+
+    assert.ok(results.some(entry => entry.status === 'warn' && entry.message === 'Service worker install handler uses self.skipWaiting(), this may break existing pages'));
+    assert.ok(results.some(entry => entry.status === 'warn' && entry.message === 'Service worker activate handler uses self.clients.claim(), this may break existing pages'));
+    assert.ok(results.some(entry => entry.code === 'service-worker.install.skip-waiting'));
+    assert.ok(results.some(entry => entry.code === 'service-worker.activate.clients-claim'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has install event handler'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker install handler calls waitUntil'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has activate event handler'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker activate handler calls waitUntil'));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('checkServiceWorker does not warn when skipWaiting is outside the install handler', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async url => {
+    if (url === 'https://example.com/') {
+      return new Response(
+        '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/registerSW.js') {
+      return new Response(
+        "if('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }",
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/sw.js') {
+      return new Response(
+        "self.skipWaiting(); self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); });",
+        { status: 200 }
+      );
+    }
+
+    return new Response('', { status: 404 });
+  };
+
+  try {
+    const results = await checkServiceWorker(
+      '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+      'https://example.com/'
+    );
+
+    assert.ok(
+      !results.some(
+        entry =>
+          entry.code === 'service-worker.install.skip-waiting'
+      )
+    );
+    assert.ok(
+      results.some(
+        entry =>
+          entry.status === 'pass' &&
+          entry.message === 'Service worker install handler calls waitUntil'
+      )
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('checkServiceWorker follows generated Workbox service worker chains', async () => {
@@ -218,7 +468,7 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
 
     if (url === 'https://example.com/sw.js') {
       return new Response(
-        "self.addEventListener('install', () => {}); self.addEventListener('activate', () => {}); self.addEventListener('fetch', () => {}); self.addEventListener('push', () => {}); self.addEventListener('notificationclick', () => {}); caches.open('v1');",
+        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('fetch', () => {}); self.addEventListener('push', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('notificationclick', () => {}); caches.open('v1');",
         { status: 200 }
       );
     }
@@ -233,11 +483,14 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
     );
 
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration found: https://example.com/sw.js'));
-    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has install event handler'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has install event handler' && !('code' in entry)));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker install handler calls waitUntil'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has activate event handler'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker activate handler calls waitUntil'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has fetch event handler'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker appears to cache assets'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has push event handler'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker push handler calls waitUntil'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has notificationclick event handler'));
     assert.ok(!results.some(entry => entry.message.includes('does not expose a static URL')));
   } finally {

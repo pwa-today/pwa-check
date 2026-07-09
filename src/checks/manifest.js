@@ -731,7 +731,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
     results.push(
       hasRequiredShortcutMembers
         ? result('pass', 'Manifest shortcuts include name and url')
-        : result('warn', 'Manifest shortcuts do not consistently include name and url')
+        : result('warn', 'Manifest shortcuts do not consistently include name and url', 'manifest.shortcuts.members')
     );
 
     const optionalShortcutMembersPresent = manifest.shortcuts.every(shortcut => {
@@ -749,7 +749,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
     results.push(
       optionalShortcutMembersPresent
         ? result('pass', 'Manifest shortcuts optionally include short_name and description')
-        : result('warn', 'Manifest shortcuts include invalid short_name or description values')
+        : result('warn', 'Manifest shortcuts include invalid short_name or description values', 'manifest.shortcuts.optional-members')
     );
 
     const shortcutsWithIcons = manifest.shortcuts.filter(shortcut => Array.isArray(shortcut?.icons));
@@ -761,7 +761,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
       results.push(
         hasValidShortcutIcons
         ? result('pass', 'Manifest shortcut icons include src and sizes')
-        : result('warn', 'Manifest shortcut icons do not consistently include src and sizes')
+        : result('warn', 'Manifest shortcut icons do not consistently include src and sizes', 'manifest.shortcuts.icons')
       );
 
       for (const shortcut of shortcutsWithIcons) {
@@ -790,7 +790,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
     results.push(
       isRelativeAction
         ? result('pass', 'Manifest share_target action is a relative URL')
-        : result('warn', 'Manifest share_target action is missing or is not a relative URL')
+        : result('warn', 'Manifest share_target action is missing or is not a relative URL', 'manifest.share-target.action')
     );
 
     const hasValidMethod =
@@ -800,14 +800,14 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
     results.push(
       hasValidMethod
         ? result('pass', `Manifest share_target method is valid: ${shareTarget.method.toUpperCase()}`)
-        : result('warn', 'Manifest share_target method must be GET or POST')
+        : result('warn', 'Manifest share_target method must be GET or POST', 'manifest.share-target.method')
     );
 
     if (String(shareTarget.method).toUpperCase() === 'POST') {
       results.push(
         shareTarget.enctype === 'multipart/form-data'
           ? result('pass', 'Manifest share_target enctype is multipart/form-data')
-          : result('warn', 'Manifest share_target enctype must be multipart/form-data when method is POST')
+          : result('warn', 'Manifest share_target enctype must be multipart/form-data when method is POST', 'manifest.share-target.enctype')
       );
     }
 
@@ -820,7 +820,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
       results.push(
         invalidParamKeys.length === 0
           ? result('pass', 'Manifest share_target params contain supported members')
-          : result('warn', `Manifest share_target params contain unsupported members: ${invalidParamKeys.join(', ')}`)
+          : result('warn', `Manifest share_target params contain unsupported members: ${invalidParamKeys.join(', ')}`, 'manifest.share-target.params')
       );
 
       if (Array.isArray(shareTarget.params.files) && shareTarget.params.files.length > 0) {
@@ -829,14 +829,14 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
         results.push(
           hasValidFiles
             ? result('pass', 'Manifest share_target files include name and accept')
-            : result('warn', 'Manifest share_target files do not consistently include valid name and accept values')
+            : result('warn', 'Manifest share_target files do not consistently include valid name and accept values', 'manifest.share-target.files')
         );
       }
     } else {
-      results.push(result('warn', 'Manifest share_target does not define params'));
+      results.push(result('warn', 'Manifest share_target does not define params', 'manifest.share-target.params-missing'));
     }
   } else {
-    results.push(result('warn', 'Manifest does not define share_target'));
+    results.push(result('warn', 'Manifest does not define share_target', 'manifest.share-target.missing'));
   }
 
   if (Array.isArray(manifest.file_handlers) && manifest.file_handlers.length > 0) {
@@ -854,10 +854,10 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
     results.push(
       hasValidFileHandlers
         ? result('pass', 'Manifest file_handlers include a relative action and valid accept mappings')
-        : result('warn', 'Manifest file_handlers do not consistently include a relative action and valid accept mappings')
+        : result('warn', 'Manifest file_handlers do not consistently include a relative action and valid accept mappings', 'manifest.file-handlers')
     );
   } else {
-    results.push(result('warn', 'Manifest does not define file_handlers'));
+    results.push(result('warn', 'Manifest does not define file_handlers', 'manifest.file-handlers.missing'));
   }
 
   if (typeof manifest.handle_links === 'string' && manifest.handle_links.length > 0) {

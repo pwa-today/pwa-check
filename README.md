@@ -65,7 +65,7 @@ The CLI prints a list of results with one of three statuses:
 - `fail`
 
 The process exits with a non-zero status if any `fail` result is found, so it fits cleanly into CI and local checks.
-You can also make warnings fail the run, emit JSON, or set a timeout for each request.
+You can also make warnings fail the run, ignore specific warning codes, emit JSON, or set a timeout for each request.
 
 ## Usage
 
@@ -107,7 +107,41 @@ Flags:
 
 - `--json`: emit machine-readable output
 - `--fail-on-warn`: treat warnings as failures
+- `--ignore-warn <code>`: exclude a warning code from `--fail-on-warn`
 - `--timeout <ms>`: cap each network request
+
+
+### Warning Codes
+Warnings include stable codes so you can ignore a specific issue without hiding the rest of the run.
+
+Usage `--ignore-warn <code>`:
+
+Manifest:
+
+- `manifest.share-target.missing`
+- `manifest.share-target.params-missing`
+- `manifest.share-target.action`
+- `manifest.share-target.method`
+- `manifest.share-target.enctype`
+- `manifest.share-target.params`
+- `manifest.share-target.files`
+- `manifest.file-handlers.missing`
+- `manifest.file-handlers`
+- `manifest.shortcuts.members`
+- `manifest.shortcuts.optional-members`
+- `manifest.shortcuts.icons`
+
+Service worker:
+
+- `service-worker.install.missing`
+- `service-worker.install.wait-until`
+- `service-worker.install.skip-waiting`
+- `service-worker.activate.missing`
+- `service-worker.activate.wait-until`
+- `service-worker.activate.clients-claim`
+- `service-worker.push.missing`
+- `service-worker.push.wait-until`
+- `service-worker.notificationclick.missing`
 
 ## Testing
 

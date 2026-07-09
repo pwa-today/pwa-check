@@ -2,13 +2,14 @@
 import { checkPwa, shouldFailResults, summarizeResults } from '../src/checker.js';
 
 const printUsage = () => {
-  console.error('Usage: pwa-check [--json] [--fail-on-warn] [--timeout <ms>] <url>');
+  console.error('Usage: pwa-check [--json] [--fail-on-warn] [--ignore-warn <code>] [--timeout <ms>] <url>');
 };
 
 const parseArgs = argv => {
   const options = {
     json: false,
     failOnWarn: false,
+    ignoreWarnCodes: [],
     timeoutMs: undefined,
     url: null
   };
@@ -23,6 +24,28 @@ const parseArgs = argv => {
 
     if (arg === '--fail-on-warn') {
       options.failOnWarn = true;
+      continue;
+    }
+
+    if (arg === '--ignore-warn') {
+      const ignoreWarnCode = argv[++index];
+
+      if (!ignoreWarnCode) {
+        throw new Error('Missing value for --ignore-warn');
+      }
+
+      options.ignoreWarnCodes.push(ignoreWarnCode);
+      continue;
+    }
+
+    if (arg.startsWith('--ignore-warn=')) {
+      const ignoreWarnCode = arg.slice('--ignore-warn='.length);
+
+      if (!ignoreWarnCode) {
+        throw new Error('Missing value for --ignore-warn');
+      }
+
+      options.ignoreWarnCodes.push(ignoreWarnCode);
       continue;
     }
 
@@ -79,7 +102,10 @@ if (options.help || !options.url) {
 
 const results = await checkPwa(options.url, { timeoutMs: options.timeoutMs });
 const summary = summarizeResults(results);
-const exitCode = shouldFailResults(results, { failOnWarn: options.failOnWarn }) ? 1 : 0;
+const exitCode = shouldFailResults(results, {
+  failOnWarn: options.failOnWarn,
+  ignoreWarnCodes: options.ignoreWarnCodes
+}) ? 1 : 0;
 
 if (options.json) {
   console.log(

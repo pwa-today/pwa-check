@@ -38,3 +38,34 @@ test('shouldFailResults can fail on warnings', () => {
     false
   );
 });
+
+test('shouldFailResults can ignore warned codes', () => {
+  assert.equal(
+    shouldFailResults(
+      [
+        { status: 'pass', message: 'a' },
+        { status: 'warn', message: 'b', code: 'service-worker.install.skip-waiting' },
+        { status: 'warn', message: 'c', code: 'service-worker.push.wait-until' }
+      ],
+      {
+        failOnWarn: true,
+        ignoreWarnCodes: ['service-worker.install.skip-waiting']
+      }
+    ),
+    true
+  );
+
+  assert.equal(
+    shouldFailResults(
+      [
+        { status: 'pass', message: 'a' },
+        { status: 'warn', message: 'b', code: 'service-worker.install.skip-waiting' }
+      ],
+      {
+        failOnWarn: true,
+        ignoreWarnCodes: ['service-worker.install.skip-waiting']
+      }
+    ),
+    false
+  );
+});

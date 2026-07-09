@@ -16,8 +16,20 @@ export const summarizeResults = results => {
   );
 };
 
-export const shouldFailResults = (results, { failOnWarn = false } = {}) => {
-  return results.some(result => result.status === 'fail' || (failOnWarn && result.status === 'warn'));
+export const shouldFailResults = (results, { failOnWarn = false, ignoreWarnCodes = [] } = {}) => {
+  const ignoredWarnCodes = new Set(ignoreWarnCodes);
+
+  return results.some(result => {
+    if (result.status === 'fail') {
+      return true;
+    }
+
+    if (!failOnWarn || result.status !== 'warn') {
+      return false;
+    }
+
+    return !result.code || !ignoredWarnCodes.has(result.code);
+  });
 };
 
 export const checkPwa = async (inputUrl, options = {}) => {
