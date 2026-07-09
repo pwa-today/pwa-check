@@ -35,7 +35,10 @@ export const shouldFailResults = (results, { failOnWarn = false, ignoreWarnCodes
 export const checkPwa = async (inputUrl, options = {}) => {
   const results = [];
   const pageUrl = normalizeUrl(inputUrl);
-  const fetchOptions = { timeoutMs: options.timeoutMs };
+  const fetchOptions = {
+    timeoutMs: options.timeoutMs,
+    insecureLocalhost: options.insecureLocalhost
+  };
 
   let html;
 

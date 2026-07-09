@@ -230,12 +230,27 @@ test('installability criteria require an allowed display mode', async () => {
   assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
 });
 
-test('installability criteria require 192px and 512px icons', async () => {
+test('installability criteria require at least one icon sized 144px or larger', async () => {
   const manifest = createValidManifest();
   manifest.icons = [
     {
-      src: '/icons/icon-192.png',
-      sizes: '192x192',
+      src: '/icons/icon-144.png',
+      sizes: '144x144',
+      type: 'image/png'
+    }
+  ];
+
+  const results = await checkManifestMembers(manifest);
+
+  assert.ok(hasResult(results, 'pass', 'PWA meets installability criteria'));
+});
+
+test('installability criteria warn when all icons are smaller than 144px', async () => {
+  const manifest = createValidManifest();
+  manifest.icons = [
+    {
+      src: '/icons/icon-128.png',
+      sizes: '128x128',
       type: 'image/png'
     }
   ];
@@ -243,6 +258,23 @@ test('installability criteria require 192px and 512px icons', async () => {
   const results = await checkManifestMembers(manifest);
 
   assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
+});
+
+test('installability criteria accept name when short_name is missing', async () => {
+  const manifest = createValidManifest();
+  delete manifest.short_name;
+  manifest.name = 'Example App';
+  manifest.icons = [
+    {
+      src: '/icons/icon-144.png',
+      sizes: '144x144',
+      type: 'image/png'
+    }
+  ];
+
+  const results = await checkManifestMembers(manifest);
+
+  assert.ok(hasResult(results, 'pass', 'PWA meets installability criteria'));
 });
 
 test('icons should include maskable purpose for each icon size', async () => {

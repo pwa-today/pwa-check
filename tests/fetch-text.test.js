@@ -53,3 +53,32 @@ test('fetchText times out when the request takes too long', async () => {
     global.fetch = originalFetch;
   }
 });
+
+test('fetchText can ignore tls errors for localhost when requested', async () => {
+  const originalFetch = global.fetch;
+  const originalTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  let capturedTlsSetting;
+
+  global.fetch = async () => {
+    capturedTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+
+    return new Response('ok', {
+      status: 200
+    });
+  };
+
+  try {
+    await fetchText('https://localhost:8800/', { insecureLocalhost: true });
+
+    assert.equal(capturedTlsSetting, '0');
+    assert.equal(process.env.NODE_TLS_REJECT_UNAUTHORIZED, originalTlsSetting);
+  } finally {
+    global.fetch = originalFetch;
+
+    if (originalTlsSetting === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalTlsSetting;
+    }
+  }
+});

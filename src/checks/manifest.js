@@ -238,7 +238,9 @@ const screenshotAspectRatio = screenshot => {
 };
 
 const hasManifestInstallabilityCriteria = manifest => {
-  const hasName = typeof manifest.short_name === 'string' && manifest.short_name.length > 0;
+  const hasName =
+    (typeof manifest.short_name === 'string' && manifest.short_name.length > 0) ||
+    (typeof manifest.name === 'string' && manifest.name.length > 0);
   const hasDisplay = ['fullscreen', 'standalone', 'minimal-ui', 'window-controls-overlay'].includes(
     manifest.display
   );
@@ -247,21 +249,23 @@ const hasManifestInstallabilityCriteria = manifest => {
     manifest.prefer_related_applications === undefined ||
     manifest.prefer_related_applications === false;
 
-  const iconSizes = Array.isArray(manifest.icons)
-    ? manifest.icons
-        .map(icon => (typeof icon?.sizes === 'string' ? icon.sizes.split(/\s+/) : []))
-        .flat()
-    : [];
-  const has192Icon = iconSizes.includes('192x192');
-  const has512Icon = iconSizes.includes('512x512');
+  const hasInstallableIcon = Array.isArray(manifest.icons)
+    ? manifest.icons.some(icon =>
+        typeof icon?.sizes === 'string' &&
+        icon.sizes.split(/\s+/).some(size => {
+          const parsed = parseSize(size);
+
+          return parsed && parsed.width >= 144 && parsed.height >= 144;
+        })
+      )
+    : false;
 
   return (
     hasName &&
     hasDisplay &&
     hasStartUrl &&
     hasPreferRelatedApplications &&
-    has192Icon &&
-    has512Icon
+    hasInstallableIcon
   );
 };
 

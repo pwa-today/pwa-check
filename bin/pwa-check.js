@@ -2,7 +2,9 @@
 import { checkPwa, shouldFailResults, summarizeResults } from '../src/checker.js';
 
 const printUsage = () => {
-  console.error('Usage: pwa-check [--json] [--fail-on-warn] [--ignore-warn <code>] [--timeout <ms>] <url>');
+  console.error(
+    'Usage: pwa-check [--json] [--fail-on-warn] [--ignore-warn <code>] [--timeout <ms>] [--insecure-localhost] <url>'
+  );
 };
 
 const parseArgs = argv => {
@@ -10,6 +12,7 @@ const parseArgs = argv => {
     json: false,
     failOnWarn: false,
     ignoreWarnCodes: [],
+    insecureLocalhost: false,
     timeoutMs: undefined,
     url: null
   };
@@ -65,6 +68,11 @@ const parseArgs = argv => {
       continue;
     }
 
+    if (arg === '--insecure-localhost') {
+      options.insecureLocalhost = true;
+      continue;
+    }
+
     if (arg === '--help' || arg === '-h') {
       options.help = true;
       continue;
@@ -100,7 +108,10 @@ if (options.help || !options.url) {
   process.exit(options.help ? 0 : 1);
 }
 
-const results = await checkPwa(options.url, { timeoutMs: options.timeoutMs });
+const results = await checkPwa(options.url, {
+  timeoutMs: options.timeoutMs,
+  insecureLocalhost: options.insecureLocalhost
+});
 const summary = summarizeResults(results);
 const exitCode = shouldFailResults(results, {
   failOnWarn: options.failOnWarn,

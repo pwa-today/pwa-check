@@ -109,6 +109,7 @@ Flags:
 - `--fail-on-warn`: treat warnings as failures
 - `--ignore-warn <code>`: exclude a warning code from `--fail-on-warn`
 - `--timeout <ms>`: cap each network request
+- `--insecure-localhost`: allow HTTPS requests to localhost with an invalid certificate
 
 
 ### Warning Codes
