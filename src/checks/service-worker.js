@@ -18,7 +18,7 @@ export const findServiceWorkerUrls = (html, pageUrl, resolveBaseUrl = pageUrl) =
 };
 
 const resolveServiceWorkerRegistrationUrl = (source, pageUrl, expression, index = 0) => {
-  const trimmedExpression = expression.trim().replace(/[),;]+$/, '');
+  const trimmedExpression = expression.trim().replace(/[;,]+$/, '');
 
   const quotedMatch = trimmedExpression.match(/^['"`]([^'"`]+)['"`]$/);
   if (quotedMatch) {
@@ -138,6 +138,34 @@ const resolveServiceWorkerFunctionUrl = (source, pageUrl, functionName) => {
 
 const hasServiceWorkerRegistrationHint = source => {
   return /navigator\.serviceWorker\.register\s*\(/i.test(source);
+};
+
+const looksLikeServiceWorker = source => {
+  return (
+    hasEventHandler(source, 'install') ||
+    hasEventHandler(source, 'activate') ||
+    hasEventHandler(source, 'fetch') ||
+    hasEventHandler(source, 'push') ||
+    hasEventHandler(source, 'notificationclick') ||
+    /\bworkbox:/.test(source) ||
+    /\bprecacheAndRoute\s*\(/.test(source)
+  );
+};
+
+const findConventionalServiceWorkerUrl = async (pageUrl, fetchOptions = {}) => {
+  const candidates = ['/sw.js', '/service-worker.js'].map(path => resolveUrl(pageUrl, path));
+
+  for (const candidate of candidates) {
+    try {
+      const source = await fetchText(candidate, fetchOptions);
+
+      if (looksLikeServiceWorker(source)) {
+        return candidate;
+      }
+    } catch {}
+  }
+
+  return null;
 };
 
 export const findServiceWorkerImportUrls = (source, baseUrl) => {
@@ -742,8 +770,16 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
     const hasRegistrationHint = sources.some(({ source }) =>
       hasServiceWorkerRegistrationHint(source)
     );
+    const conventionalServiceWorkerUrl = await findConventionalServiceWorkerUrl(
+      pageUrl,
+      fetchOptions
+    );
 
-    if (hasRegistrationHint) {
+    if (conventionalServiceWorkerUrl) {
+      serviceWorkerUrls.push(conventionalServiceWorkerUrl);
+    }
+
+    if (serviceWorkerUrls.length === 0 && hasRegistrationHint) {
       results.push(
         result(
           'warn',

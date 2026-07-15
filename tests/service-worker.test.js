@@ -45,6 +45,23 @@ test('findServiceWorkerUrls resolves string variables and new URL expressions', 
   ]);
 });
 
+test('findServiceWorkerUrls resolves generated urls from function calls', () => {
+  const source = `
+    this.workerUrl = async function() {
+      var fileName = await config.get('workerFile') || 'worker.js';
+      var absoluteUrl = window.location.origin + '/' + fileName;
+      var url = new URL(absoluteUrl);
+      return url.href;
+    };
+    var generatedUrl = await app.workerUrl();
+    navigator.serviceWorker.register(generatedUrl);
+  `;
+
+  assert.deepEqual(findServiceWorkerUrls(source, 'https://example.com/app/'), [
+    'https://example.com/worker.js'
+  ]);
+});
+
 test('collectServiceWorkerSources follows importScripts recursively', async () => {
   const originalFetch = global.fetch;
 
@@ -493,6 +510,34 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker push handler calls waitUntil'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has notificationclick event handler'));
     assert.ok(!results.some(entry => entry.message.includes('does not expose a static URL')));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('checkServiceWorker falls back to conventional sw.js when registration is generated', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async url => {
+    if (url === 'https://example.com/sw.js') {
+      return new Response(
+        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('fetch', () => {}); self.addEventListener('push', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('notificationclick', () => {}); self.__WB_DISABLE_DEV_LOGS = true; caches.open('v1');",
+        { status: 200 }
+      );
+    }
+
+    return new Response('', { status: 404 });
+  };
+
+  try {
+    const results = await checkServiceWorker(
+      '<html><head><script type="module" src="/assets/app.js"></script></head><body></body></html>',
+      'https://example.com/'
+    );
+
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration found: https://example.com/sw.js'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker install handler calls waitUntil'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has fetch event handler'));
   } finally {
     global.fetch = originalFetch;
   }
