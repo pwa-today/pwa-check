@@ -142,6 +142,7 @@ Service worker:
 - `service-worker.activate.clients-claim`
 - `service-worker.push.missing`
 - `service-worker.push.wait-until`
+- `service-worker.push.show-notification`
 - `service-worker.notificationclick.missing`
 
 ## Testing

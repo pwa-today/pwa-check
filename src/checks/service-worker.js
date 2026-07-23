@@ -328,15 +328,20 @@ const hasPatternInHandlerSource = (handlerSource, pattern) => {
     return false;
   }
 
-  const match = handlerSource.trim().match(
+  const trimmedHandlerSource = handlerSource.trim();
+  const blockMatch = trimmedHandlerSource.match(
     /^(?:async\s+)?(?:function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*[A-Za-z_$][\w$]*\s*\)|\(\s*[A-Za-z_$][\w$]*\s*\)|[A-Za-z_$][\w$]*)\s*(?:=>)?\s*\{([\s\S]*)\}$/
   );
 
-  if (!match) {
-    return false;
+  if (blockMatch) {
+    return pattern.test(blockMatch[1] || '');
   }
 
-  return pattern.test(match[1] || '');
+  const expressionMatch = trimmedHandlerSource.match(
+    /^(?:async\s+)?(?:\(\s*[A-Za-z_$][\w$]*\s*\)|[A-Za-z_$][\w$]*)\s*=>\s*([\s\S]+)$/
+  );
+
+  return expressionMatch ? pattern.test(expressionMatch[1] || '') : false;
 };
 
 const resolveNamedHandlerSource = (swCode, handlerName, beforeIndex) => {
@@ -623,15 +628,25 @@ const hasEventPattern = (swCode, eventName, pattern) => {
 
         handlerSource = swCode.slice(cursor, bodyStart + body.length + 2).trim();
       } else {
-        const arrowIndex = swCode.indexOf('=>', cursor);
-        if (arrowIndex === -1) {
-          const handlerNameMatch = swCode.slice(cursor).match(/^([A-Za-z_$][\w$]*)/);
-          if (!handlerNameMatch) {
-            continue;
+        const handlerNameMatch = swCode.slice(cursor).match(/^([A-Za-z_$][\w$]*)/);
+        let arrowIndex = -1;
+
+        if (handlerNameMatch) {
+          let afterHandlerName = cursor + handlerNameMatch[1].length;
+          while (afterHandlerName < swCode.length && /\s/.test(swCode[afterHandlerName])) {
+            afterHandlerName += 1;
           }
 
-          handlerSource = resolveNamedHandlerSource(swCode, handlerNameMatch[1], match.index ?? 0);
-        } else {
+          if (swCode.startsWith('=>', afterHandlerName)) {
+            arrowIndex = afterHandlerName;
+          } else {
+            handlerSource = resolveNamedHandlerSource(swCode, handlerNameMatch[1], match.index ?? 0);
+          }
+        } else if (swCode[cursor] === '(') {
+          arrowIndex = swCode.indexOf('=>', cursor);
+        }
+
+        if (arrowIndex !== -1) {
           const bodyStart = arrowIndex + 2;
           let bodyCursor = bodyStart;
 
@@ -703,6 +718,10 @@ export const hasPushHandler = swCode => {
   return (
     hasEventWaitUntil(swCode, 'push')
   );
+};
+
+export const pushHandlerShowsNotification = swCode => {
+  return hasEventPattern(swCode, 'push', /\.showNotification\s*\(/);
 };
 
 const usesInstallSkipWaiting = swCode => {
@@ -860,6 +879,7 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
 
   const pushHandlerPresent = hasEventHandler(swCode, 'push') || hasPushHandler(swCode);
   const pushHandlerCallsWaitUntil = hasPushHandler(swCode);
+  const pushHandlerCallsShowNotification = pushHandlerShowsNotification(swCode);
 
   results.push(
     pushHandlerPresent
@@ -872,6 +892,12 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
       pushHandlerCallsWaitUntil
         ? result('pass', 'Service worker push handler calls waitUntil')
         : result('warn', 'Service worker has push event handler, but it does not call waitUntil', 'service-worker.push.wait-until')
+    );
+
+    results.push(
+      pushHandlerCallsShowNotification
+        ? result('pass', 'Service worker push handler calls showNotification')
+        : result('warn', 'Service worker has push event handler, but it does not call showNotification', 'service-worker.push.show-notification')
     );
   }
 

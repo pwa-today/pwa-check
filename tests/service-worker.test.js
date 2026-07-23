@@ -9,6 +9,7 @@ import {
   hasFetchHandler,
   hasInstallHandler,
   hasPushHandler,
+  pushHandlerShowsNotification,
   findServiceWorkerImportUrls,
   findServiceWorkerDependencyUrls,
   findServiceWorkerUrls
@@ -172,6 +173,33 @@ test('event handlers without waitUntil do not count for install activate or push
   assert.equal(hasPushHandler("self.addEventListener('push', event => {});"), false);
 });
 
+test('push handlers show a notification', () => {
+  assert.equal(
+    pushHandlerShowsNotification(
+      "self.addEventListener('push', event => { event.waitUntil(self.registration.showNotification('New message')); });"
+    ),
+    true
+  );
+  assert.equal(
+    pushHandlerShowsNotification(
+      "const pushHandler = event => { return registration.showNotification('New message'); }; self.addEventListener('push', pushHandler); self.addEventListener('message', event => console.log(event));"
+    ),
+    true
+  );
+  assert.equal(
+    pushHandlerShowsNotification(
+      "self.addEventListener('push', event => self.registration.showNotification('New message'));"
+    ),
+    true
+  );
+  assert.equal(
+    pushHandlerShowsNotification(
+      "self.registration.showNotification('Outside handler'); self.addEventListener('push', event => {});"
+    ),
+    false
+  );
+});
+
 test('minified handler parameter names still count when waitUntil is called', () => {
   assert.equal(
     hasInstallHandler("self.addEventListener('install', function(e) { e.waitUntil(Promise.resolve()); });"),
@@ -245,6 +273,14 @@ test('checkServiceWorker reports push handlers without waitUntil separately', as
           entry.status === 'warn' &&
           entry.code === 'service-worker.push.wait-until' &&
           entry.message === 'Service worker has push event handler, but it does not call waitUntil'
+      )
+    );
+    assert.ok(
+      results.some(
+        entry =>
+          entry.status === 'warn' &&
+          entry.code === 'service-worker.push.show-notification' &&
+          entry.message === 'Service worker has push event handler, but it does not call showNotification'
       )
     );
     assert.ok(
@@ -485,7 +521,7 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
 
     if (url === 'https://example.com/sw.js') {
       return new Response(
-        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('fetch', () => {}); self.addEventListener('push', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('notificationclick', () => {}); caches.open('v1');",
+        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('fetch', () => {}); self.addEventListener('push', event => { event.waitUntil(self.registration.showNotification('New message')); }); self.addEventListener('notificationclick', () => {}); caches.open('v1');",
         { status: 200 }
       );
     }
@@ -508,6 +544,7 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker appears to cache assets'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has push event handler'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker push handler calls waitUntil'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker push handler calls showNotification'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has notificationclick event handler'));
     assert.ok(!results.some(entry => entry.message.includes('does not expose a static URL')));
   } finally {
