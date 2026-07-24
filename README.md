@@ -111,11 +111,12 @@ Flags:
 - `--timeout <ms>`: cap each network request
 - `--insecure-localhost`: allow HTTPS requests to localhost with an invalid certificate
 
+In terminal output, warnings and failures include their code, priority, impact, suggested
+fix, and documentation URL. Passing checks remain on one line.
 
 ### Warning Codes
 Every result includes a stable code. Warning and failure codes also include `priority`,
-`impact`, `fix`, and `documentation` fields in JSON output. The complete catalog is
-defined in [`src/issues.js`](src/issues.js).
+`impact`, `fix`, and `documentation` fields in JSON output.
 
 Use the code shown in JSON output with `--ignore-warn <code>` to exclude one warning
 from `--fail-on-warn`.

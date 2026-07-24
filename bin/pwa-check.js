@@ -142,6 +142,22 @@ if (options.json) {
           : '\x1b[31m✗ FAIL\x1b[0m';
 
     console.log(`${icon} ${result.message}`);
+
+    if (result.status !== 'pass') {
+      const details = [
+        ['Code', result.code],
+        ['Priority', result.priority],
+        ['Impact', result.impact],
+        ['Fix', result.fix],
+        ['Docs', result.documentation]
+      ];
+
+      details
+        .filter(([, value]) => value !== undefined)
+        .forEach(([label, value]) => {
+          console.log(`  ${`${label}:`.padEnd(10)}${value}`);
+        });
+    }
   }
 
   console.log(
