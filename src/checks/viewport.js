@@ -55,16 +55,17 @@ export const checkViewport = async html => {
   const viewportContent = findViewportMeta(html);
 
   if (!viewportContent) {
-    results.push(result('warn', 'No viewport meta tag found'));
+    results.push(result('warn', 'No viewport meta tag found', 'viewport.meta.missing'));
     return results;
   }
 
   results.push(
     hasRequiredViewportContent(viewportContent)
-      ? result('pass', 'Viewport meta tag is configured for PWA display')
+      ? result('pass', 'Viewport meta tag is configured for PWA display', 'viewport.recommended-tokens')
       : result(
           'warn',
-          `Viewport meta tag is missing recommended tokens: ${getMissingViewportTokens(viewportContent).join(', ')}`
+          `Viewport meta tag is missing recommended tokens: ${getMissingViewportTokens(viewportContent).join(', ')}`,
+          'viewport.recommended-tokens'
         )
   );
 

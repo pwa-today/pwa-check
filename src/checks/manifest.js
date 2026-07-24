@@ -200,7 +200,14 @@ const isAssetReachable = async (assetUrl, fetchOptions = {}) => {
   }
 };
 
-const checkAssetReachabilityBatch = async (results, label, assets, baseUrl, fetchOptions = {}) => {
+const checkAssetReachabilityBatch = async (
+  results,
+  label,
+  code,
+  assets,
+  baseUrl,
+  fetchOptions = {}
+) => {
   if (!baseUrl) {
     return;
   }
@@ -212,8 +219,8 @@ const checkAssetReachabilityBatch = async (results, label, assets, baseUrl, fetc
       const reachable = await isAssetReachable(resolvedUrl, fetchOptions);
 
       return reachable
-        ? result('pass', `${label} is reachable: ${resolvedUrl}`)
-        : result('warn', `${label} is not reachable: ${resolvedUrl}`);
+        ? result('pass', `${label} is reachable: ${resolvedUrl}`, code)
+        : result('warn', `${label} is not reachable: ${resolvedUrl}`, code);
     });
 
   const settled = await Promise.allSettled(tasks);
@@ -445,8 +452,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
   results.push(
     manifest.scope
-      ? result('pass', 'Manifest has scope member')
-      : result('warn', 'Manifest does not have scope member')
+      ? result('pass', 'Manifest has scope member', 'manifest.scope')
+      : result('warn', 'Manifest does not have scope member', 'manifest.scope')
   );
 
   if (typeof manifest.display === 'string' && manifest.display.length > 0) {
@@ -454,26 +461,27 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       allowedDisplays.includes(manifest.display)
-        ? result('pass', `Manifest display is valid: ${manifest.display}`)
+        ? result('pass', `Manifest display is valid: ${manifest.display}`, 'manifest.display')
         : result(
             'warn',
-            'Manifest display must be standalone, fullscreen, minimal-ui, or browser; standalone is recommended'
+            'Manifest display must be standalone, fullscreen, minimal-ui, or browser; standalone is recommended',
+            'manifest.display'
           )
     );
   } else {
-    results.push(result('warn', 'Manifest does not have display member'));
+    results.push(result('warn', 'Manifest does not have display member', 'manifest.display'));
   }
 
   results.push(
     manifest.start_url
-      ? result('pass', `Manifest has start_url member: ${manifest.start_url}`)
-      : result('warn', 'Manifest does not have start_url member')
+      ? result('pass', `Manifest has start_url member: ${manifest.start_url}`, 'manifest.start-url')
+      : result('warn', 'Manifest does not have start_url member', 'manifest.start-url')
   );
 
   results.push(
     manifest.description
-      ? result('pass', 'Manifest has description member')
-      : result('warn', 'Manifest does not have description member')
+      ? result('pass', 'Manifest has description member', 'manifest.description')
+      : result('warn', 'Manifest does not have description member', 'manifest.description')
   );
 
   if (typeof manifest.short_name === 'string' && manifest.short_name.length > 0) {
@@ -481,56 +489,59 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
       results.push(
         result(
           'warn',
-          `Manifest short_name is too long (${manifest.short_name.length} characters); recommended maximum is 15`
+          `Manifest short_name is too long (${manifest.short_name.length} characters); recommended maximum is 15`,
+          'manifest.short-name'
         )
       );
     } else {
       results.push(
         result(
           'pass',
-          `Manifest short_name length is acceptable (${manifest.short_name.length} characters)`
+          `Manifest short_name length is acceptable (${manifest.short_name.length} characters)`,
+          'manifest.short-name'
         )
       );
     }
   } else {
-    results.push(result('warn', 'Manifest does not have short_name member'));
+    results.push(result('warn', 'Manifest does not have short_name member', 'manifest.short-name'));
   }
 
   results.push(
     manifest.orientation
-      ? result('pass', `Manifest has orientation member: ${manifest.orientation}`)
-      : result('warn', 'Manifest does not have orientation member')
+      ? result('pass', `Manifest has orientation member: ${manifest.orientation}`, 'manifest.orientation')
+      : result('warn', 'Manifest does not have orientation member', 'manifest.orientation')
   );
 
   if (typeof manifest.theme_color === 'string' && manifest.theme_color.length > 0) {
-    results.push(result('pass', `Manifest has theme_color member: ${manifest.theme_color}`));
+    results.push(result('pass', `Manifest has theme_color member: ${manifest.theme_color}`, 'manifest.theme-color'));
     results.push(
       isValidColorValue(manifest.theme_color)
-        ? result('pass', `Manifest theme_color is a valid color: ${manifest.theme_color}`)
-        : result('warn', 'Manifest theme_color must be a valid color')
+        ? result('pass', `Manifest theme_color is a valid color: ${manifest.theme_color}`, 'manifest.theme-color.valid')
+        : result('warn', 'Manifest theme_color must be a valid color', 'manifest.theme-color.valid')
     );
   } else {
-    results.push(result('warn', 'Manifest does not have theme_color member'));
+    results.push(result('warn', 'Manifest does not have theme_color member', 'manifest.theme-color'));
   }
 
   if (typeof manifest.background_color === 'string' && manifest.background_color.length > 0) {
     results.push(
-      result('pass', `Manifest has background_color member: ${manifest.background_color}`)
+      result('pass', `Manifest has background_color member: ${manifest.background_color}`, 'manifest.background-color')
     );
     results.push(
       isValidColorValue(manifest.background_color)
         ? result(
             'pass',
-            `Manifest background_color is a valid color: ${manifest.background_color}`
+            `Manifest background_color is a valid color: ${manifest.background_color}`,
+            'manifest.background-color.valid'
           )
-        : result('warn', 'Manifest background_color must be a valid color')
+        : result('warn', 'Manifest background_color must be a valid color', 'manifest.background-color.valid')
     );
   } else {
-    results.push(result('warn', 'Manifest does not have background_color member'));
+    results.push(result('warn', 'Manifest does not have background_color member', 'manifest.background-color'));
   }
 
   if (Array.isArray(manifest.screenshots) && manifest.screenshots.length > 0) {
-    results.push(result('pass', 'Manifest defines screenshots'));
+    results.push(result('pass', 'Manifest defines screenshots', 'manifest.screenshots'));
 
     const screenshotMembers = ['src', 'sizes', 'type', 'form_factor'];
     const hasRequiredScreenshotFields = manifest.screenshots.every(
@@ -541,8 +552,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       hasRequiredScreenshotFields
-        ? result('pass', 'Manifest screenshots include src, sizes, type, and form_factor')
-        : result('warn', 'Manifest screenshots do not consistently include src, sizes, type, and form_factor')
+        ? result('pass', 'Manifest screenshots include src, sizes, type, and form_factor', 'manifest.screenshots.members')
+        : result('warn', 'Manifest screenshots do not consistently include src, sizes, type, and form_factor', 'manifest.screenshots.members')
     );
 
     const invalidScreenshotTypes = manifest.screenshots.filter(
@@ -551,8 +562,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       invalidScreenshotTypes.length === 0
-        ? result('pass', 'Manifest screenshots use supported image types')
-        : result('warn', 'Manifest screenshots use unsupported image types')
+        ? result('pass', 'Manifest screenshots use supported image types', 'manifest.screenshots.types')
+        : result('warn', 'Manifest screenshots use unsupported image types', 'manifest.screenshots.types')
     );
 
     const invalidScreenshotSizes = manifest.screenshots.filter(screenshot => {
@@ -576,8 +587,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       invalidScreenshotSizes.length === 0
-        ? result('pass', 'Manifest screenshots use valid sizes between 320px and 3840px')
-        : result('warn', 'Manifest screenshots include sizes outside 320px to 3840px')
+        ? result('pass', 'Manifest screenshots use valid sizes between 320px and 3840px', 'manifest.screenshots.sizes')
+        : result('warn', 'Manifest screenshots include sizes outside 320px to 3840px', 'manifest.screenshots.sizes')
     );
 
     const wideScreenshots = manifest.screenshots.filter(
@@ -589,14 +600,14 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       wideScreenshots.length > 0
-        ? result('pass', 'Manifest includes at least one wide screenshot')
-        : result('warn', 'Manifest does not include a wide screenshot')
+        ? result('pass', 'Manifest includes at least one wide screenshot', 'manifest.screenshots.wide')
+        : result('warn', 'Manifest does not include a wide screenshot', 'manifest.screenshots.wide')
     );
 
     results.push(
       narrowScreenshots.length > 0
-        ? result('pass', 'Manifest includes at least one narrow screenshot')
-        : result('warn', 'Manifest does not include a narrow screenshot')
+        ? result('pass', 'Manifest includes at least one narrow screenshot', 'manifest.screenshots.narrow')
+        : result('warn', 'Manifest does not include a narrow screenshot', 'manifest.screenshots.narrow')
     );
 
     const invalidAspectGroups = [wideScreenshots, narrowScreenshots].filter(screenshots => {
@@ -616,35 +627,36 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       invalidAspectGroups.length === 0
-        ? result('pass', 'Manifest screenshots keep aspect ratios within the 2.3 limit')
-        : result('warn', 'Manifest screenshots have aspect ratios outside the 2.3 limit')
+        ? result('pass', 'Manifest screenshots keep aspect ratios within the 2.3 limit', 'manifest.screenshots.aspect-ratio')
+        : result('warn', 'Manifest screenshots have aspect ratios outside the 2.3 limit', 'manifest.screenshots.aspect-ratio')
     );
 
     results.push(
       manifest.screenshots.length <= 8
-        ? result('pass', 'Manifest has no more than 8 screenshots')
-        : result('warn', 'Manifest defines more than 8 screenshots')
+        ? result('pass', 'Manifest has no more than 8 screenshots', 'manifest.screenshots.count')
+        : result('warn', 'Manifest defines more than 8 screenshots', 'manifest.screenshots.count')
     );
 
     results.push(
       narrowScreenshots.length <= 5
-        ? result('pass', 'Manifest has no more than 5 narrow screenshots')
-        : result('warn', 'Manifest defines more than 5 narrow screenshots')
+        ? result('pass', 'Manifest has no more than 5 narrow screenshots', 'manifest.screenshots.narrow-count')
+        : result('warn', 'Manifest defines more than 5 narrow screenshots', 'manifest.screenshots.narrow-count')
     );
 
     await checkAssetReachabilityBatch(
       results,
       'Manifest screenshot',
+      'manifest.screenshots.reachable',
       manifest.screenshots.map(screenshot => screenshot?.src),
       manifestUrl,
       fetchOptions
     );
   } else {
-    results.push(result('warn', 'Manifest does not define screenshots'));
+    results.push(result('warn', 'Manifest does not define screenshots', 'manifest.screenshots.missing'));
   }
 
   if (Array.isArray(manifest.icons) && manifest.icons.length > 0) {
-    results.push(result('pass', 'Manifest defines icons'));
+    results.push(result('pass', 'Manifest defines icons', 'manifest.icons'));
 
     const hasRequiredIconFields = manifest.icons.some(
       icon => icon && icon.src && icon.type && icon.sizes
@@ -652,8 +664,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       hasRequiredIconFields
-        ? result('pass', 'Manifest icons include src, type, and sizes')
-        : result('warn', 'Manifest icons do not consistently include src, type, and sizes')
+        ? result('pass', 'Manifest icons include src, type, and sizes', 'manifest.icons.members')
+        : result('warn', 'Manifest icons do not consistently include src, type, and sizes', 'manifest.icons.members')
     );
 
     const iconSizes = manifest.icons
@@ -666,19 +678,21 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       iconSizes.some(sizes => sizes.includes('512x512'))
-        ? result('pass', 'Manifest includes a 512x512 icon')
-        : result('warn', 'Manifest does not include a 512x512 icon')
+        ? result('pass', 'Manifest includes a 512x512 icon', 'manifest.icons.512')
+        : result('warn', 'Manifest does not include a 512x512 icon', 'manifest.icons.512')
     );
 
     if (missingRecommendedSizes.length === 0) {
       results.push(
-        result('pass', 'Manifest includes recommended 192x192, 384x384, and 1024x1024 icons')
+        result('pass', 'Manifest includes recommended 192x192, 384x384, and 1024x1024 icons', 'manifest.icons.recommended-sizes')
       );
     } else {
       results.push(
         result(
           'warn',
-          `Manifest is missing recommended icon sizes: ${missingRecommendedSizes.join(', ')}`
+          `Manifest is missing recommended icon sizes: ${missingRecommendedSizes.join(', ')}`,
+          'manifest.icons.recommended-sizes',
+          { missingSizes: missingRecommendedSizes }
         )
       );
     }
@@ -696,32 +710,34 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       missingMaskableSizes.length === 0
-        ? result('pass', 'Manifest includes maskable icons for each icon size')
+        ? result('pass', 'Manifest includes maskable icons for each icon size', 'manifest.icons.maskable')
         : result(
             'warn',
-            `Manifest is missing maskable icons for these sizes: ${missingMaskableSizes.join(', ')}`
+            `Manifest is missing maskable icons for these sizes: ${missingMaskableSizes.join(', ')}`,
+            'manifest.icons.maskable'
           )
     );
 
     await checkAssetReachabilityBatch(
       results,
       'Manifest icon',
+      'manifest.icons.reachable',
       manifest.icons.map(icon => icon?.src),
       manifestUrl,
       fetchOptions
     );
   } else {
-    results.push(result('warn', 'Manifest does not define icons'));
+    results.push(result('warn', 'Manifest does not define icons', 'manifest.icons.missing'));
   }
 
   results.push(
     hasManifestInstallabilityCriteria(manifest)
-      ? result('pass', 'PWA meets installability criteria')
-      : result('warn', 'PWA does not meet installability criteria')
+      ? result('pass', 'PWA meets installability criteria', 'manifest.installability')
+      : result('warn', 'PWA does not meet installability criteria', 'manifest.installability')
   );
 
   if (Array.isArray(manifest.shortcuts) && manifest.shortcuts.length > 0) {
-    results.push(result('pass', 'Manifest defines shortcuts'));
+    results.push(result('pass', 'Manifest defines shortcuts', 'manifest.shortcuts'));
 
     const hasRequiredShortcutMembers = manifest.shortcuts.every(
       shortcut =>
@@ -734,7 +750,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       hasRequiredShortcutMembers
-        ? result('pass', 'Manifest shortcuts include name and url')
+        ? result('pass', 'Manifest shortcuts include name and url', 'manifest.shortcuts.members')
         : result('warn', 'Manifest shortcuts do not consistently include name and url', 'manifest.shortcuts.members')
     );
 
@@ -752,7 +768,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       optionalShortcutMembersPresent
-        ? result('pass', 'Manifest shortcuts optionally include short_name and description')
+        ? result('pass', 'Manifest shortcuts optionally include short_name and description', 'manifest.shortcuts.optional-members')
         : result('warn', 'Manifest shortcuts include invalid short_name or description values', 'manifest.shortcuts.optional-members')
     );
 
@@ -764,7 +780,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
       results.push(
         hasValidShortcutIcons
-        ? result('pass', 'Manifest shortcut icons include src and sizes')
+        ? result('pass', 'Manifest shortcut icons include src and sizes', 'manifest.shortcuts.icons')
         : result('warn', 'Manifest shortcut icons do not consistently include src and sizes', 'manifest.shortcuts.icons')
       );
 
@@ -772,6 +788,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
         await checkAssetReachabilityBatch(
           results,
           'Manifest shortcut icon',
+          'manifest.shortcuts.icons.reachable',
           shortcut.icons.map(icon => icon?.src),
           manifestUrl,
           fetchOptions
@@ -779,11 +796,11 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
       }
     }
   } else {
-    results.push(result('warn', 'Manifest does not define shortcuts'));
+    results.push(result('warn', 'Manifest does not define shortcuts', 'manifest.shortcuts.missing'));
   }
 
   if (manifest.share_target && typeof manifest.share_target === 'object') {
-    results.push(result('pass', 'Manifest defines share_target'));
+    results.push(result('pass', 'Manifest defines share_target', 'manifest.share-target'));
 
     const shareTarget = manifest.share_target;
     const isRelativeAction =
@@ -793,7 +810,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       isRelativeAction
-        ? result('pass', 'Manifest share_target action is a relative URL')
+        ? result('pass', 'Manifest share_target action is a relative URL', 'manifest.share-target.action')
         : result('warn', 'Manifest share_target action is missing or is not a relative URL', 'manifest.share-target.action')
     );
 
@@ -803,14 +820,14 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       hasValidMethod
-        ? result('pass', `Manifest share_target method is valid: ${shareTarget.method.toUpperCase()}`)
+        ? result('pass', `Manifest share_target method is valid: ${shareTarget.method.toUpperCase()}`, 'manifest.share-target.method')
         : result('warn', 'Manifest share_target method must be GET or POST', 'manifest.share-target.method')
     );
 
     if (String(shareTarget.method).toUpperCase() === 'POST') {
       results.push(
         shareTarget.enctype === 'multipart/form-data'
-          ? result('pass', 'Manifest share_target enctype is multipart/form-data')
+          ? result('pass', 'Manifest share_target enctype is multipart/form-data', 'manifest.share-target.enctype')
           : result('warn', 'Manifest share_target enctype must be multipart/form-data when method is POST', 'manifest.share-target.enctype')
       );
     }
@@ -823,7 +840,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
       results.push(
         invalidParamKeys.length === 0
-          ? result('pass', 'Manifest share_target params contain supported members')
+          ? result('pass', 'Manifest share_target params contain supported members', 'manifest.share-target.params')
           : result('warn', `Manifest share_target params contain unsupported members: ${invalidParamKeys.join(', ')}`, 'manifest.share-target.params')
       );
 
@@ -832,7 +849,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
         results.push(
           hasValidFiles
-            ? result('pass', 'Manifest share_target files include name and accept')
+            ? result('pass', 'Manifest share_target files include name and accept', 'manifest.share-target.files')
             : result('warn', 'Manifest share_target files do not consistently include valid name and accept values', 'manifest.share-target.files')
         );
       }
@@ -844,7 +861,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
   }
 
   if (Array.isArray(manifest.file_handlers) && manifest.file_handlers.length > 0) {
-    results.push(result('pass', 'Manifest defines file_handlers'));
+    results.push(result('pass', 'Manifest defines file_handlers', 'manifest.file-handlers'));
 
     const hasValidFileHandlers = manifest.file_handlers.every(
       fileHandler =>
@@ -857,7 +874,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 
     results.push(
       hasValidFileHandlers
-        ? result('pass', 'Manifest file_handlers include a relative action and valid accept mappings')
+        ? result('pass', 'Manifest file_handlers include a relative action and valid accept mappings', 'manifest.file-handlers')
         : result('warn', 'Manifest file_handlers do not consistently include a relative action and valid accept mappings', 'manifest.file-handlers')
     );
   } else {
@@ -867,11 +884,11 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
   if (typeof manifest.handle_links === 'string' && manifest.handle_links.length > 0) {
     results.push(
       ['preferred', 'not-preferred', 'auto'].includes(manifest.handle_links)
-        ? result('pass', `Manifest handle_links is valid: ${manifest.handle_links}`)
-        : result('warn', 'Manifest handle_links must be preferred, not-preferred, or auto')
+        ? result('pass', `Manifest handle_links is valid: ${manifest.handle_links}`, 'manifest.handle-links')
+        : result('warn', 'Manifest handle_links must be preferred, not-preferred, or auto', 'manifest.handle-links')
     );
   } else {
-    results.push(result('warn', 'Manifest does not define handle_links'));
+    results.push(result('warn', 'Manifest does not define handle_links', 'manifest.handle-links.missing'));
   }
 
   return results;
@@ -893,7 +910,8 @@ export const checkManifest = async (html, pageUrl, fetchOptions = {}) => {
         results.push(
           result(
             'warn',
-            'Web App Manifest is only discoverable in inline JavaScript; link it in the HTML head for better install detection'
+            'Web App Manifest is only discoverable in inline JavaScript; link it in the HTML head for better install detection',
+            'manifest.discovery.javascript-inline'
           )
         );
 
@@ -917,7 +935,8 @@ export const checkManifest = async (html, pageUrl, fetchOptions = {}) => {
           results.push(
             result(
               'warn',
-              'Web App Manifest is only discoverable in JavaScript; link it in the HTML head for better install detection'
+              'Web App Manifest is only discoverable in JavaScript; link it in the HTML head for better install detection',
+              'manifest.discovery.javascript'
             )
           );
 
@@ -936,26 +955,27 @@ export const checkManifest = async (html, pageUrl, fetchOptions = {}) => {
       results.push(
         result(
           'warn',
-          'Web App Manifest appears to be injected by JavaScript, but could not be resolved statically. This may prevent the app from being installed on some devices'
+          'Web App Manifest appears to be injected by JavaScript, but could not be resolved statically. This may prevent the app from being installed on some devices',
+          'manifest.discovery.dynamic-unresolved'
         )
       );
       return results;
     }
 
-    results.push(result('fail', 'No Web App Manifest found in HTML or scripts'));
+    results.push(result('fail', 'No Web App Manifest found in HTML or scripts', 'manifest.discovery.missing'));
     return results;
   }
 
   if (manifestUrl) {
-    results.push(result('pass', `Manifest found: ${manifestUrl}`));
+    results.push(result('pass', `Manifest found: ${manifestUrl}`, 'manifest.discovery.found'));
   }
 
   try {
     const manifest = await loadManifest(manifestUrl, fetchOptions);
-    results.push(result('pass', 'Manifest is valid JSON'));
+    results.push(result('pass', 'Manifest is valid JSON', 'manifest.json.valid'));
     results.push(...await checkManifestMembers(manifest, manifestUrl, fetchOptions));
   } catch (error) {
-    results.push(result('fail', `Could not read manifest: ${error.message}`));
+    results.push(result('fail', `Could not read manifest: ${error.message}`, 'manifest.json.valid'));
   }
 
   return results;

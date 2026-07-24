@@ -802,7 +802,8 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
       results.push(
         result(
           'warn',
-          'Service worker registration is present, but the script does not expose a static URL; subsequent service worker checks could not be run'
+          'Service worker registration is present, but the script does not expose a static URL; subsequent service worker checks could not be run',
+          'service-worker.registration.dynamic-unresolved'
         )
       );
 
@@ -811,12 +812,12 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
   }
 
   if (serviceWorkerUrls.length === 0) {
-    results.push(result('fail', 'No service worker registration found'));
+    results.push(result('fail', 'No service worker registration found', 'service-worker.registration.missing'));
     return results;
   }
 
   results.push(
-    result('pass', `Service worker registration found: ${serviceWorkerUrls[0]}`)
+    result('pass', `Service worker registration found: ${serviceWorkerUrls[0]}`, 'service-worker.registration.found')
   );
 
   const swSources = await collectServiceWorkerSources(serviceWorkerUrls[0], new Set(), fetchOptions);
@@ -828,14 +829,14 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
 
   results.push(
     installHandlerPresent
-      ? result('pass', 'Service worker has install event handler')
+      ? result('pass', 'Service worker has install event handler', 'service-worker.install')
       : result('warn', 'Service worker has no install event handler', 'service-worker.install.missing')
   );
 
   if (installHandlerPresent) {
     results.push(
       installHandlerCallsWaitUntil
-        ? result('pass', 'Service worker install handler calls waitUntil')
+        ? result('pass', 'Service worker install handler calls waitUntil', 'service-worker.install.wait-until')
         : result('warn', 'Service worker has install event handler, but it does not call waitUntil', 'service-worker.install.wait-until')
     );
 
@@ -849,14 +850,14 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
 
   results.push(
     activateHandlerPresent
-      ? result('pass', 'Service worker has activate event handler')
+      ? result('pass', 'Service worker has activate event handler', 'service-worker.activate')
       : result('warn', 'Service worker has no activate event handler', 'service-worker.activate.missing')
   );
 
   if (activateHandlerPresent) {
     results.push(
       activateHandlerCallsWaitUntil
-        ? result('pass', 'Service worker activate handler calls waitUntil')
+        ? result('pass', 'Service worker activate handler calls waitUntil', 'service-worker.activate.wait-until')
         : result('warn', 'Service worker has activate event handler, but it does not call waitUntil', 'service-worker.activate.wait-until')
     );
 
@@ -867,14 +868,14 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
 
   results.push(
     hasFetchHandler(swCode)
-      ? result('pass', 'Service worker has fetch event handler')
-      : result('warn', 'Service worker has no fetch event handler')
+      ? result('pass', 'Service worker has fetch event handler', 'service-worker.fetch')
+      : result('warn', 'Service worker has no fetch event handler', 'service-worker.fetch.missing')
   );
 
   results.push(
     hasCacheHandling
-      ? result('pass', 'Service worker appears to cache assets')
-      : result('warn', 'Service worker does not appear to cache assets')
+      ? result('pass', 'Service worker appears to cache assets', 'service-worker.cache')
+      : result('warn', 'Service worker does not appear to cache assets', 'service-worker.cache.missing')
   );
 
   const pushHandlerPresent = hasEventHandler(swCode, 'push') || hasPushHandler(swCode);
@@ -883,27 +884,27 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
 
   results.push(
     pushHandlerPresent
-      ? result('pass', 'Service worker has push event handler')
+      ? result('pass', 'Service worker has push event handler', 'service-worker.push')
       : result('warn', 'Service worker has no push event handler', 'service-worker.push.missing')
   );
 
   if (pushHandlerPresent) {
     results.push(
       pushHandlerCallsWaitUntil
-        ? result('pass', 'Service worker push handler calls waitUntil')
+        ? result('pass', 'Service worker push handler calls waitUntil', 'service-worker.push.wait-until')
         : result('warn', 'Service worker has push event handler, but it does not call waitUntil', 'service-worker.push.wait-until')
     );
 
     results.push(
       pushHandlerCallsShowNotification
-        ? result('pass', 'Service worker push handler calls showNotification')
+        ? result('pass', 'Service worker push handler calls showNotification', 'service-worker.push.show-notification')
         : result('warn', 'Service worker has push event handler, but it does not call showNotification', 'service-worker.push.show-notification')
     );
   }
 
   results.push(
     hasNotificationClickHandler(swCode)
-      ? result('pass', 'Service worker has notificationclick event handler')
+      ? result('pass', 'Service worker has notificationclick event handler', 'service-worker.notificationclick')
       : result('warn', 'Service worker has no notificationclick event handler', 'service-worker.notificationclick.missing')
   );
 

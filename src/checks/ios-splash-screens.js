@@ -123,25 +123,25 @@ export const checkIosSplashScreens = async (html, pageUrl, fetchOptions = {}) =>
   const sourceWithStartupImage = sources.find(entry => hasStartupImage(entry.source));
 
   if (!sourceWithStartupImage) {
-    results.push(result('warn', 'No iOS startup image links found'));
+    results.push(result('warn', 'No iOS startup image links found', 'ios.startup-images.missing'));
     return results;
   }
 
   const hasPortrait = sources.some(entry => hasPortraitStartupImage(entry.source));
   const hasLandscape = sources.some(entry => hasLandscapeStartupImage(entry.source));
 
-  results.push(result('pass', 'iOS startup image links found'));
+  results.push(result('pass', 'iOS startup image links found', 'ios.startup-images'));
 
   results.push(
     hasPortrait
-      ? result('pass', 'iOS startup image includes a portrait variant')
-      : result('warn', 'iOS startup image does not include a portrait variant')
+      ? result('pass', 'iOS startup image includes a portrait variant', 'ios.startup-images.portrait')
+      : result('warn', 'iOS startup image does not include a portrait variant', 'ios.startup-images.portrait')
   );
 
   results.push(
     hasLandscape
-      ? result('pass', 'iOS startup image includes a landscape variant')
-      : result('warn', 'iOS startup image does not include a landscape variant')
+      ? result('pass', 'iOS startup image includes a landscape variant', 'ios.startup-images.landscape')
+      : result('warn', 'iOS startup image does not include a landscape variant', 'ios.startup-images.landscape')
   );
 
   return results;

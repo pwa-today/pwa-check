@@ -44,9 +44,9 @@ export const checkPwa = async (inputUrl, options = {}) => {
 
   try {
     html = await fetchText(pageUrl, fetchOptions);
-    results.push(result('pass', 'Site is reachable'));
+    results.push(result('pass', 'Site is reachable', 'site.reachable'));
   } catch (error) {
-    results.push(result('fail', `Could not fetch site: ${error.message}`));
+    results.push(result('fail', `Could not fetch site: ${error.message}`, 'site.reachable'));
     return results;
   }
 

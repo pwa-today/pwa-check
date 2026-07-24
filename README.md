@@ -113,37 +113,12 @@ Flags:
 
 
 ### Warning Codes
-Warnings include stable codes so you can ignore a specific issue without hiding the rest of the run.
+Every result includes a stable code. Warning and failure codes also include `priority`,
+`impact`, `fix`, and `documentation` fields in JSON output. The complete catalog is
+defined in [`src/issues.js`](src/issues.js).
 
-Usage `--ignore-warn <code>`:
-
-Manifest:
-
-- `manifest.share-target.missing`
-- `manifest.share-target.params-missing`
-- `manifest.share-target.action`
-- `manifest.share-target.method`
-- `manifest.share-target.enctype`
-- `manifest.share-target.params`
-- `manifest.share-target.files`
-- `manifest.file-handlers.missing`
-- `manifest.file-handlers`
-- `manifest.shortcuts.members`
-- `manifest.shortcuts.optional-members`
-- `manifest.shortcuts.icons`
-
-Service worker:
-
-- `service-worker.install.missing`
-- `service-worker.install.wait-until`
-- `service-worker.install.skip-waiting`
-- `service-worker.activate.missing`
-- `service-worker.activate.wait-until`
-- `service-worker.activate.clients-claim`
-- `service-worker.push.missing`
-- `service-worker.push.wait-until`
-- `service-worker.push.show-notification`
-- `service-worker.notificationclick.missing`
+Use the code shown in JSON output with `--ignore-warn <code>` to exclude one warning
+from `--fail-on-warn`.
 
 ## Testing
 

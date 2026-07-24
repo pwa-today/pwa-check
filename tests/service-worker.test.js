@@ -275,13 +275,20 @@ test('checkServiceWorker reports push handlers without waitUntil separately', as
           entry.message === 'Service worker has push event handler, but it does not call waitUntil'
       )
     );
-    assert.ok(
-      results.some(
-        entry =>
-          entry.status === 'warn' &&
-          entry.code === 'service-worker.push.show-notification' &&
-          entry.message === 'Service worker has push event handler, but it does not call showNotification'
-      )
+    assert.deepEqual(
+      results.find(entry => entry.code === 'service-worker.push.show-notification'),
+      {
+        status: 'warn',
+        message:
+          'Service worker has push event handler, but it does not call showNotification',
+        code: 'service-worker.push.show-notification',
+        priority: 'high',
+        impact:
+          'Push messages may arrive without displaying a notification to the user.',
+        fix: 'Call registration.showNotification(...) in the "push" event handler and pass its promise to event.waitUntil(...).',
+        documentation:
+          'https://notifications.spec.whatwg.org/#dom-serviceworkerregistration-shownotification'
+      }
     );
     assert.ok(
       !results.some(
@@ -536,7 +543,7 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
     );
 
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration found: https://example.com/sw.js'));
-    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has install event handler' && !('code' in entry)));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has install event handler' && entry.code === 'service-worker.install'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker install handler calls waitUntil'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has activate event handler'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker activate handler calls waitUntil'));

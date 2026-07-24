@@ -140,6 +140,28 @@ test('checkManifestMembers accepts a valid manifest', async () => {
   assert.ok(hasResult(results, 'pass', 'Manifest handle_links is valid: preferred'));
 });
 
+test('recommended icon size warnings include remediation details', async () => {
+  const manifest = createValidManifest();
+  manifest.icons = manifest.icons.filter(
+    icon => icon.sizes !== '384x384' && icon.sizes !== '1024x1024'
+  );
+
+  const results = await checkManifestMembers(manifest);
+  const warning = results.find(
+    entry => entry.code === 'manifest.icons.recommended-sizes'
+  );
+
+  assert.deepEqual(warning, {
+    status: 'warn',
+    message: 'Manifest is missing recommended icon sizes: 384x384, 1024x1024',
+    code: 'manifest.icons.recommended-sizes',
+    priority: 'high',
+    impact: 'Some devices may use a blurry or unsuitable installation icon.',
+    fix: 'Add 384×384 and 1024×1024 PNG icons to the manifest "icons" array.',
+    documentation: 'https://web.dev/articles/add-manifest#icons'
+  });
+});
+
 test('scope member is required', async () => {
   const manifest = createValidManifest();
   delete manifest.scope;
