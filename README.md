@@ -69,10 +69,17 @@ You can also make warnings fail the run, ignore specific warning codes, emit JSO
 
 ## Usage
 
-Run it against a URL when you want a straight answer instead of guessing:
+Run the free checks against a URL when you want a straight answer instead of
+guessing:
 
 ```bash
 node bin/pwa-check.js https://example.com
+```
+
+The explicit free-check command produces the same result:
+
+```bash
+pwa-check check https://example.com
 ```
 
 or install it as a CLI tool:
@@ -120,6 +127,119 @@ Every result includes a stable code. Warning and failure codes also include `pri
 
 Use the code shown in JSON output with `--ignore-warn <code>` to exclude one warning
 from `--fail-on-warn`.
+
+## Paid runtime audits
+
+Paying customers can run the hosted runtime checks with the explicit `audit`
+command. A token never enables paid checks by itself.
+
+Set the access token in the environment:
+
+```bash
+export PWA_AUDIT_TOKEN="..."
+```
+
+Then start an audit:
+
+```bash
+pwa-check audit https://example.com
+```
+
+The CLI creates one aggregate audit, waits for the background checks to
+complete, prints the results, applies the quality gate, and returns:
+
+- `0` when the audit and quality gate pass
+- `1` when the quality gate fails
+- `2` for authentication or configuration errors
+- `3` for audit service errors or timeouts
+
+Runtime audit flags:
+
+- `--profile <quick|standard|full|custom>`
+- `--include <check-id>`: include one or more comma-separated check IDs
+- `--exclude <check-id>`: exclude one or more comma-separated check IDs
+- `--project <project-id>`
+- `--minimum-score <0-100>`
+- `--fail-on <critical|high|medium|low>`
+- `--config <file>`
+- `--poll-interval <ms>`
+- `--audit-timeout <ms>`
+- `--api-url <url>`: override the default `https://api.pwa.today`
+- `--idempotency-key <key>`
+- `--json`
+
+The token can only be supplied through `PWA_AUDIT_TOKEN`. The API URL and
+idempotency key can also be set with `PWA_TODAY_API_URL` and
+`PWA_TODAY_IDEMPOTENCY_KEY`.
+
+### Audit configuration
+
+The CLI automatically loads `pwa-check.yml`, `pwa-check.yaml`, or
+`pwa-check.json` from the current directory. You can select another file with
+`--config`.
+
+```yaml
+version: 1
+
+audit:
+  profile: standard
+  exclude:
+    - push-notifications
+    - persistent-storage
+
+qualityGate:
+  minimumScore: 90
+  failOn:
+    - critical
+    - high
+
+reports:
+  junit: reports/pwa-audit.xml
+  json: reports/pwa-audit.json
+```
+
+Checks with additional inputs use the stable check ID under `audit.options`:
+
+```yaml
+audit:
+  profile: full
+  options:
+    offline-navigation:
+      series:
+        - [/, /installation, /offline-support]
+        - [/, /audit, /email-list]
+      expectedSelectors:
+        - main
+        - h1
+      requiredText:
+        - Example
+
+    push-notifications:
+      payload:
+        title: Runtime audit
+        message: Test notification
+    offline-request-retry:
+      requestUrl: /api/messages
+      method: POST
+      requestBody:
+        message: Test request
+```
+
+Stable runtime check IDs:
+
+- `manifest`
+- `offline`
+- `offline-navigation`
+- `service-worker-first-installation`
+- `service-worker-handlers`
+- `service-worker-update`
+- `before-install-prompt`
+- `persistent-storage`
+- `offline-request-retry`
+- `push-notifications`
+
+`offline-request-retry` and `push-notifications` require check-specific options.
+If their prerequisites are missing, the result is `not-applicable`.
 
 ## Testing
 
