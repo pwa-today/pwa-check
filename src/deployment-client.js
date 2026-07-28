@@ -180,58 +180,82 @@ export const runDeploymentCheck = async ({
   const statusUrl = endpointUrl(baseUrl, created.statusUrl);
   const completionUrl = endpointUrl(baseUrl, created.completionUrl);
 
-  await waitForState({
-    statusUrl,
-    token,
-    deploymentToken: created.deploymentToken,
-    expectedState: (job) => job.state === 'baseline-ready',
-    timeoutMs: deploymentTimeoutMs,
-    pollIntervalMs,
-    requestTimeoutMs,
-    fetchFunction,
-    sleep,
-    now,
-    onState
-  });
+  try {
+    await waitForState({
+      statusUrl,
+      token,
+      deploymentToken: created.deploymentToken,
+      expectedState: (job) => job.state === 'baseline-ready',
+      timeoutMs: deploymentTimeoutMs,
+      pollIntervalMs,
+      requestTimeoutMs,
+      fetchFunction,
+      sleep,
+      now,
+      onState
+    });
 
-  await runCommand({
-    command,
-    cwd,
-    environment,
-    timeoutMs: commandTimeoutMs
-  });
+    await runCommand({
+      command,
+      cwd,
+      environment,
+      timeoutMs: commandTimeoutMs
+    });
 
-  await requestJson({
-    fetchFunction,
-    url: completionUrl,
-    token,
-    method: 'POST',
-    body: metadata,
-    headers: {
-      'x-deployment-token': created.deploymentToken
-    },
-    requestTimeoutMs
-  });
+    await requestJson({
+      fetchFunction,
+      url: completionUrl,
+      token,
+      method: 'POST',
+      body: metadata,
+      headers: {
+        'x-deployment-token': created.deploymentToken
+      },
+      requestTimeoutMs
+    });
 
-  const completed = await waitForState({
-    statusUrl,
-    token,
-    deploymentToken: created.deploymentToken,
-    expectedState: (job) => {
-      return TERMINAL_STATES.has(job.state) && Boolean(job.result);
-    },
-    timeoutMs: deploymentTimeoutMs,
-    pollIntervalMs,
-    requestTimeoutMs,
-    fetchFunction,
-    sleep,
-    now,
-    onState
-  });
+    const completed = await waitForState({
+      statusUrl,
+      token,
+      deploymentToken: created.deploymentToken,
+      expectedState: (job) => {
+        return TERMINAL_STATES.has(job.state) && Boolean(job.result);
+      },
+      timeoutMs: deploymentTimeoutMs,
+      pollIntervalMs,
+      requestTimeoutMs,
+      fetchFunction,
+      sleep,
+      now,
+      onState
+    });
 
-  return {
-    testId: created.testId,
-    state: completed.state,
-    result: completed.result
-  };
+    return {
+      testId: created.testId,
+      state: completed.state,
+      result: completed.result
+    };
+  }
+  catch (error) {
+    try {
+      await requestJson({
+        fetchFunction,
+        url: statusUrl,
+        token,
+        method: 'DELETE',
+        headers: {
+          'x-deployment-token': created.deploymentToken
+        },
+        requestTimeoutMs
+      });
+    }
+    catch (cancellationError) {
+      console.error(
+        'Could not cancel the deployment check.',
+        cancellationError
+      );
+    }
+
+    throw error;
+  }
 };

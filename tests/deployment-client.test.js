@@ -110,6 +110,10 @@ test('does not report completion when the deployment command fails', async () =>
     }, 202),
     jsonResponse({
       state: 'baseline-ready'
+    }),
+    jsonResponse({
+      testId: 'test-123',
+      state: 'cancelled'
     })
   ];
 
@@ -139,5 +143,10 @@ test('does not report completion when the deployment command fails', async () =>
     /Deployment failed/
   );
 
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
+  assert.equal(requests[2].options.method, 'DELETE');
+  assert.equal(
+    requests[2].options.headers['x-deployment-token'],
+    'deployment-token'
+  );
 });
