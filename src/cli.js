@@ -10,6 +10,10 @@ import {
   runRemoteAudit
 } from './audit-client.js';
 import {
+  executeDeploymentCommand,
+  runDeploymentCheck
+} from './deployment-client.js';
+import {
   writeAuditReports
 } from './audit-reports.js';
 import {
@@ -21,6 +25,8 @@ import {
 const packageData = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8')
 );
+
+const DEPLOYMENT_CHECK = 'service-worker-deployment';
 
 const splitList = (value) => {
   return value
@@ -377,6 +383,7 @@ const runAudit = async ({
   stdout,
   stderr,
   fetchFunction,
+  runCommand,
   sleep,
   now
 }) => {
@@ -405,13 +412,93 @@ const runAudit = async ({
     const failOn = options.failOn.length > 0
       ? options.failOn
       : configuredGate.failOn;
+    const apiUrl =
+      options.apiUrl ??
+      environment.PWA_TODAY_API_URL ??
+      'https://api.pwa.today';
+    const requestOptions = {
+      ...(auditConfig.options ?? {})
+    };
+    const deploymentRequested = include.includes(DEPLOYMENT_CHECK);
+
+    if (deploymentRequested) {
+      const deploymentConfig = requestOptions[DEPLOYMENT_CHECK] ?? {};
+      const command = deploymentConfig.command;
+
+      if (
+        !Array.isArray(command) ||
+        command.length === 0 ||
+        command.some((entry) => {
+          return typeof entry !== 'string' || entry.length === 0;
+        })
+      ) {
+        throw new TypeError(
+          `audit.options.${DEPLOYMENT_CHECK}.command must be a non-empty array of strings.`
+        );
+      }
+
+      const {
+        command: ignoredCommand,
+        commandTimeout,
+        ...deploymentOptions
+      } = deploymentConfig;
+      const deploymentTimeout =
+        deploymentOptions.deploymentTimeout ?? 10 * 60_000;
+      const commandTimeoutMs = commandTimeout ?? deploymentTimeout;
+
+      if (
+        !Number.isFinite(deploymentTimeout) ||
+        deploymentTimeout <= 0 ||
+        !Number.isFinite(commandTimeoutMs) ||
+        commandTimeoutMs <= 0
+      ) {
+        throw new TypeError(
+          `audit.options.${DEPLOYMENT_CHECK} timeouts must be positive numbers.`
+        );
+      }
+
+      const deployment = await runDeploymentCheck({
+        apiUrl,
+        token,
+        url: options.url,
+        options: deploymentOptions,
+        command,
+        commandTimeoutMs,
+        metadata: withoutUndefined({
+          commitSha:
+            environment.BITBUCKET_COMMIT ??
+            environment.GITHUB_SHA
+        }),
+        cwd,
+        environment,
+        pollIntervalMs: options.pollIntervalMs ?? 2000,
+        deploymentTimeoutMs: deploymentTimeout,
+        fetchFunction,
+        runCommand,
+        sleep,
+        now,
+        onState: options.json
+          ? () => {}
+          : (state) => {
+              stdout(`Deployment check: ${state}\n`);
+            }
+      });
+
+      requestOptions[DEPLOYMENT_CHECK] = {
+        testId: deployment.testId
+      };
+    }
+    else {
+      delete requestOptions[DEPLOYMENT_CHECK];
+    }
+
     const request = {
       url: options.url,
       projectId: options.projectId ?? auditConfig.projectId,
       profile: options.profile ?? auditConfig.profile ?? 'standard',
       include,
       exclude,
-      options: auditConfig.options ?? {},
+      options: requestOptions,
       qualityGate: withoutUndefined({
         minimumScore:
           options.minimumScore ??
@@ -424,10 +511,7 @@ const runAudit = async ({
       })
     };
     const output = await runRemoteAudit({
-      apiUrl:
-        options.apiUrl ??
-        environment.PWA_TODAY_API_URL ??
-        'https://api.pwa.today',
+      apiUrl,
       token,
       request,
       idempotencyKey:
@@ -495,6 +579,7 @@ export const runCli = async (
     stdout = (value) => process.stdout.write(value),
     stderr = (value) => process.stderr.write(value),
     fetchFunction = fetch,
+    runCommand = executeDeploymentCommand,
     sleep,
     now
   } = {}
@@ -527,6 +612,7 @@ export const runCli = async (
       stdout,
       stderr,
       fetchFunction,
+      runCommand,
       sleep,
       now
     });

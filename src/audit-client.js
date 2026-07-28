@@ -16,12 +16,13 @@ export class AuditApiError extends Error {
   }
 }
 
-const requestJson = async ({
+export const requestJson = async ({
   fetchFunction,
   url,
   token,
   method = 'GET',
   body,
+  headers = {},
   idempotencyKey,
   requestTimeoutMs = 30000
 }) => {
@@ -42,7 +43,8 @@ const requestJson = async ({
           ? {
               'idempotency-key': idempotencyKey
             }
-          : {})
+          : {}),
+        ...headers
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(requestTimeoutMs)

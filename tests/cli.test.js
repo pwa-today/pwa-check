@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
-  mkdtemp
+  mkdtemp,
+  writeFile
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -107,4 +108,113 @@ test('returns the quality-gate exit code for a completed audit', async () => {
 
   assert.equal(exitCode, 1);
   assert.equal(JSON.parse(stdout).audit.auditId, 'audit-123');
+});
+
+test('orchestrates a deployment before creating the runtime audit', async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), 'pwa-check-cli-')
+  );
+
+  await writeFile(
+    path.join(directory, 'pwa-check.yml'),
+    [
+      'version: 1',
+      'audit:',
+      '  profile: custom',
+      '  include:',
+      '    - service-worker-deployment',
+      '  options:',
+      '    service-worker-deployment:',
+      '      deploymentTimeout: 900000',
+      '      command:',
+      '        - ./deploy.sh',
+      ''
+    ].join('\n')
+  );
+
+  const requests = [];
+  const responses = [
+    jsonResponse({
+      testId: 'test-123',
+      deploymentToken: 'deployment-token',
+      statusUrl: '/checks/serviceworker-deployment/test-123',
+      completionUrl: '/checks/serviceworker-deployment/test-123/complete'
+    }, 202),
+    jsonResponse({
+      state: 'baseline-ready'
+    }),
+    jsonResponse({
+      state: 'deployment-reported'
+    }, 202),
+    jsonResponse({
+      state: 'completed',
+      result: {
+        status: 'passed',
+        message: 'Deployment passed.'
+      }
+    }),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'queued'
+    }, 202),
+    jsonResponse({
+      auditId: 'audit-123',
+      url: 'https://example.com/',
+      status: 'completed',
+      score: 100,
+      qualityGate: {
+        passed: true
+      }
+    }),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'completed',
+      results: []
+    })
+  ];
+  let commandCalled = false;
+  const exitCode = await runCli([
+    'audit',
+    '--json',
+    'https://example.com'
+  ], {
+    environment: {
+      PWA_AUDIT_TOKEN: 'token-value',
+      BITBUCKET_COMMIT: 'abc123'
+    },
+    cwd: directory,
+    fetchFunction: async (url, options) => {
+      requests.push({
+        url,
+        options
+      });
+      return responses.shift();
+    },
+    runCommand: async ({ command }) => {
+      commandCalled = true;
+      assert.deepEqual(command, ['./deploy.sh']);
+    },
+    sleep: async () => {},
+    now: () => 0,
+    stdout: () => {}
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(commandCalled, true);
+
+  const auditRequest = requests.find(({ url }) => {
+    return url.endsWith('/v1/audits');
+  });
+  const auditBody = JSON.parse(auditRequest.options.body);
+
+  assert.deepEqual(
+    auditBody.options['service-worker-deployment'],
+    {
+      testId: 'test-123'
+    }
+  );
+  assert.equal(
+    JSON.stringify(auditBody).includes('./deploy.sh'),
+    false
+  );
 });

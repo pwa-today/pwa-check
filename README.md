@@ -225,6 +225,28 @@ audit:
         message: Test request
 ```
 
+The service worker deployment check is opt-in because it runs a local
+deployment command. The CLI waits for the hosted check to capture its baseline,
+runs the command without a shell, waits for it to exit successfully, and then
+signals that the deployment is complete:
+
+```yaml
+audit:
+  profile: full
+  include:
+    - service-worker-deployment
+  options:
+    service-worker-deployment:
+      deploymentTimeout: 900000
+      commandTimeout: 900000
+      command:
+        - ./scripts/deploy.sh
+```
+
+The command and command timeout are local-only settings and are never sent to
+the PWA Today API. The deployment script must not exit until the deployment is
+finished and publicly observable.
+
 Stable runtime check IDs:
 
 - `manifest`
@@ -233,13 +255,16 @@ Stable runtime check IDs:
 - `service-worker-first-installation`
 - `service-worker-handlers`
 - `service-worker-update`
+- `service-worker-deployment` (explicit opt-in only)
 - `before-install-prompt`
 - `persistent-storage`
 - `offline-request-retry`
 - `push-notifications`
 
-`offline-request-retry` and `push-notifications` require check-specific options.
-If their prerequisites are missing, the result is `not-applicable`.
+`offline-request-retry` and `push-notifications` require hosted check options;
+missing prerequisites produce `not-applicable`. A selected
+`service-worker-deployment` check requires a local command and missing local
+configuration is a CLI configuration error.
 
 ## Testing
 
