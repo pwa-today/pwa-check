@@ -151,6 +151,7 @@ export const runDeploymentCheck = async ({
     });
   },
   now = () => Date.now(),
+  onCreated = () => {},
   onState = () => {}
 }) => {
   const baseUrl = apiUrl.replace(/\/+$/, '');
@@ -181,6 +182,10 @@ export const runDeploymentCheck = async ({
   const completionUrl = endpointUrl(baseUrl, created.completionUrl);
 
   try {
+    await onCreated({
+      testId: created.testId
+    });
+
     await waitForState({
       statusUrl,
       token,

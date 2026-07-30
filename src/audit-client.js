@@ -91,22 +91,13 @@ export const requestJson = async ({
   return data;
 };
 
-export const runRemoteAudit = async ({
+export const createRemoteAudit = async ({
   apiUrl,
   token,
   request,
   idempotencyKey,
-  pollIntervalMs = 2000,
-  auditTimeoutMs = 15 * 60_000,
   requestTimeoutMs = 30000,
-  fetchFunction = fetch,
-  sleep = async (milliseconds) => {
-    await new Promise((resolve) => {
-      setTimeout(resolve, milliseconds);
-    });
-  },
-  now = () => Date.now(),
-  onStatus = () => {}
+  fetchFunction = fetch
 }) => {
   const baseUrl = apiUrl.replace(/\/+$/, '');
   const created = await requestJson({
@@ -125,8 +116,54 @@ export const runRemoteAudit = async ({
     );
   }
 
+  return created;
+};
+
+export const reportAuditDeployment = async ({
+  apiUrl,
+  token,
+  auditId,
+  failed = false,
+  requestTimeoutMs = 30000,
+  fetchFunction = fetch
+}) => {
+  const baseUrl = apiUrl.replace(/\/+$/, '');
+
+  return await requestJson({
+    fetchFunction,
+    url: `${baseUrl}/v1/audits/${encodeURIComponent(
+      auditId
+    )}/deployment`,
+    token,
+    method: 'POST',
+    body: failed
+      ? {
+          failed: true
+        }
+      : {},
+    requestTimeoutMs
+  });
+};
+
+export const waitForRemoteAudit = async ({
+  apiUrl,
+  token,
+  auditId,
+  pollIntervalMs = 2000,
+  auditTimeoutMs = 15 * 60_000,
+  requestTimeoutMs = 30000,
+  fetchFunction = fetch,
+  sleep = async (milliseconds) => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, milliseconds);
+    });
+  },
+  now = () => Date.now(),
+  onStatus = () => {}
+}) => {
+  const baseUrl = apiUrl.replace(/\/+$/, '');
   const statusUrl = `${baseUrl}/v1/audits/${encodeURIComponent(
-    created.auditId
+    auditId
   )}`;
   const resultsUrl = `${statusUrl}/results`;
   const deadline = now() + auditTimeoutMs;
@@ -166,4 +203,13 @@ export const runRemoteAudit = async ({
   throw new AuditApiError(
     `Runtime audit timed out after ${auditTimeoutMs} ms.`
   );
+};
+
+export const runRemoteAudit = async (options) => {
+  const created = await createRemoteAudit(options);
+
+  return await waitForRemoteAudit({
+    ...options,
+    auditId: created.auditId
+  });
 };

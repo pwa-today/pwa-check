@@ -7,7 +7,10 @@ import {
 } from './audit-config.js';
 import {
   AuditApiError,
-  runRemoteAudit
+  createRemoteAudit,
+  reportAuditDeployment,
+  runRemoteAudit,
+  waitForRemoteAudit
 } from './audit-client.js';
 import {
   executeDeploymentCommand,
@@ -420,6 +423,33 @@ const runAudit = async ({
       ...(auditConfig.options ?? {})
     };
     const deploymentRequested = include.includes(DEPLOYMENT_CHECK);
+    const idempotencyKey =
+      options.idempotencyKey ??
+      environment.PWA_TODAY_IDEMPOTENCY_KEY;
+    const buildAuditRequest = () => ({
+      url: options.url,
+      projectId: options.projectId ?? auditConfig.projectId,
+      profile: options.profile ?? auditConfig.profile ?? 'standard',
+      include,
+      exclude,
+      options: requestOptions,
+      qualityGate: withoutUndefined({
+        minimumScore:
+          options.minimumScore ??
+          configuredGate.minimumScore,
+        failOn
+      }),
+      source: withoutUndefined({
+        ...detectSource(environment),
+        cliVersion: packageData.version
+      })
+    });
+    const onAuditStatus = options.json
+      ? () => {}
+      : (status) => {
+          stdout(`Audit status: ${status}\n`);
+        };
+    let output;
 
     if (deploymentRequested) {
       const deploymentConfig = requestOptions[DEPLOYMENT_CHECK] ?? {};
@@ -457,77 +487,100 @@ const runAudit = async ({
         );
       }
 
-      const deployment = await runDeploymentCheck({
-        apiUrl,
-        token,
-        url: options.url,
-        options: deploymentOptions,
-        command,
-        commandTimeoutMs,
-        metadata: withoutUndefined({
-          commitSha:
-            environment.BITBUCKET_COMMIT ??
-            environment.GITHUB_SHA
-        }),
-        cwd,
-        environment,
-        pollIntervalMs: options.pollIntervalMs ?? 2000,
-        deploymentTimeoutMs: deploymentTimeout,
-        fetchFunction,
-        runCommand,
-        sleep,
-        now,
-        onState: options.json
-          ? () => {}
-          : (state) => {
-              stdout(`Deployment check: ${state}\n`);
-            }
-      });
+      let preparedAudit;
 
-      requestOptions[DEPLOYMENT_CHECK] = {
-        testId: deployment.testId
-      };
+      try {
+        await runDeploymentCheck({
+          apiUrl,
+          token,
+          url: options.url,
+          options: deploymentOptions,
+          command,
+          commandTimeoutMs,
+          metadata: withoutUndefined({
+            commitSha:
+              environment.BITBUCKET_COMMIT ??
+              environment.GITHUB_SHA
+          }),
+          cwd,
+          environment,
+          pollIntervalMs: options.pollIntervalMs ?? 2000,
+          deploymentTimeoutMs: deploymentTimeout,
+          fetchFunction,
+          runCommand,
+          sleep,
+          now,
+          onCreated: async ({ testId }) => {
+            requestOptions[DEPLOYMENT_CHECK] = {
+              testId
+            };
+            preparedAudit = await createRemoteAudit({
+              apiUrl,
+              token,
+              request: buildAuditRequest(),
+              idempotencyKey,
+              fetchFunction
+            });
+          },
+          onState: options.json
+            ? () => {}
+            : (state) => {
+                stdout(`Deployment check: ${state}\n`);
+              }
+        });
+
+        await reportAuditDeployment({
+          apiUrl,
+          token,
+          auditId: preparedAudit.auditId,
+          fetchFunction
+        });
+        output = await waitForRemoteAudit({
+          apiUrl,
+          token,
+          auditId: preparedAudit.auditId,
+          pollIntervalMs: options.pollIntervalMs ?? 2000,
+          auditTimeoutMs: options.auditTimeoutMs ?? 15 * 60_000,
+          fetchFunction,
+          sleep,
+          now,
+          onStatus: onAuditStatus
+        });
+      }
+      catch (error) {
+        if (preparedAudit?.auditId) {
+          await reportAuditDeployment({
+            apiUrl,
+            token,
+            auditId: preparedAudit.auditId,
+            failed: true,
+            fetchFunction
+          }).catch((reportError) => {
+            console.error(
+              'Could not mark the prepared audit as failed.',
+              reportError
+            );
+          });
+        }
+
+        throw error;
+      }
     }
     else {
       delete requestOptions[DEPLOYMENT_CHECK];
+      output = await runRemoteAudit({
+        apiUrl,
+        token,
+        request: buildAuditRequest(),
+        idempotencyKey,
+        pollIntervalMs: options.pollIntervalMs ?? 2000,
+        auditTimeoutMs: options.auditTimeoutMs ?? 15 * 60_000,
+        fetchFunction,
+        sleep,
+        now,
+        onStatus: onAuditStatus
+      });
     }
-
-    const request = {
-      url: options.url,
-      projectId: options.projectId ?? auditConfig.projectId,
-      profile: options.profile ?? auditConfig.profile ?? 'standard',
-      include,
-      exclude,
-      options: requestOptions,
-      qualityGate: withoutUndefined({
-        minimumScore:
-          options.minimumScore ??
-          configuredGate.minimumScore,
-        failOn
-      }),
-      source: withoutUndefined({
-        ...detectSource(environment),
-        cliVersion: packageData.version
-      })
-    };
-    const output = await runRemoteAudit({
-      apiUrl,
-      token,
-      request,
-      idempotencyKey:
-        options.idempotencyKey ??
-        environment.PWA_TODAY_IDEMPOTENCY_KEY,
-      pollIntervalMs: options.pollIntervalMs ?? 2000,
-      auditTimeoutMs: options.auditTimeoutMs ?? 15 * 60_000,
-      fetchFunction,
-      sleep,
-      now,
-      onStatus: options.json
-        ? () => {}
-        : (status) => {
-            stdout(`Audit status: ${status}\n`);
-          }
-    });
 
     if (options.json) {
       stdout(`${JSON.stringify(output, null, 2)}\n`);

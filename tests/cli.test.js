@@ -110,7 +110,7 @@ test('returns the quality-gate exit code for a completed audit', async () => {
   assert.equal(JSON.parse(stdout).audit.auditId, 'audit-123');
 });
 
-test('orchestrates a deployment before creating the runtime audit', async () => {
+test('creates a queued audit before orchestrating its deployment', async () => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), 'pwa-check-cli-')
   );
@@ -139,6 +139,10 @@ test('orchestrates a deployment before creating the runtime audit', async () => 
       deploymentToken: 'deployment-token',
       statusUrl: '/checks/serviceworker-deployment/test-123',
       completionUrl: '/checks/serviceworker-deployment/test-123/complete'
+    }, 202),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'queued'
     }, 202),
     jsonResponse({
       state: 'baseline-ready'
@@ -173,6 +177,7 @@ test('orchestrates a deployment before creating the runtime audit', async () => 
     })
   ];
   let commandCalled = false;
+  let requestCountWhenCommandCalled;
   const exitCode = await runCli([
     'audit',
     '--json',
@@ -192,6 +197,7 @@ test('orchestrates a deployment before creating the runtime audit', async () => 
     },
     runCommand: async ({ command }) => {
       commandCalled = true;
+      requestCountWhenCommandCalled = requests.length;
       assert.deepEqual(command, ['./deploy.sh']);
     },
     sleep: async () => {},
@@ -201,6 +207,7 @@ test('orchestrates a deployment before creating the runtime audit', async () => 
 
   assert.equal(exitCode, 0);
   assert.equal(commandCalled, true);
+  assert.equal(requestCountWhenCommandCalled, 3);
 
   const auditRequest = requests.find(({ url }) => {
     return url.endsWith('/v1/audits');
@@ -217,4 +224,88 @@ test('orchestrates a deployment before creating the runtime audit', async () => 
     JSON.stringify(auditBody).includes('./deploy.sh'),
     false
   );
+  assert.equal(
+    requests.some(({ url }) => {
+      return url.endsWith('/v1/audits/audit-123/deployment');
+    }),
+    true
+  );
+});
+
+test('marks the queued audit failed when deployment orchestration fails', async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), 'pwa-check-cli-')
+  );
+
+  await writeFile(
+    path.join(directory, 'pwa-check.yml'),
+    [
+      'version: 1',
+      'audit:',
+      '  profile: custom',
+      '  include:',
+      '    - service-worker-deployment',
+      '  options:',
+      '    service-worker-deployment:',
+      '      command:',
+      '        - ./deploy.sh',
+      ''
+    ].join('\n')
+  );
+
+  const requests = [];
+  const responses = [
+    jsonResponse({
+      testId: 'test-123',
+      deploymentToken: 'deployment-token',
+      statusUrl: '/checks/serviceworker-deployment/test-123',
+      completionUrl: '/checks/serviceworker-deployment/test-123/complete'
+    }, 202),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'queued'
+    }, 202),
+    jsonResponse({
+      state: 'baseline-ready'
+    }),
+    jsonResponse({
+      state: 'cancelled'
+    }),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'failed'
+    })
+  ];
+  const exitCode = await runCli([
+    'audit',
+    '--json',
+    'https://example.com'
+  ], {
+    environment: {
+      PWA_AUDIT_TOKEN: 'token-value'
+    },
+    cwd: directory,
+    fetchFunction: async (url, options) => {
+      requests.push({
+        url,
+        options
+      });
+      return responses.shift();
+    },
+    runCommand: async () => {
+      throw new Error('Deployment failed.');
+    },
+    sleep: async () => {},
+    now: () => 0,
+    stderr: () => {}
+  });
+  const failureRequest = requests.find(({ url, options }) => {
+    return (
+      url.endsWith('/v1/audits/audit-123/deployment') &&
+      JSON.parse(options.body).failed
+    );
+  });
+
+  assert.equal(exitCode, 2);
+  assert.equal(JSON.parse(failureRequest.options.body).failed, true);
 });

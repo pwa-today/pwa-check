@@ -68,12 +68,17 @@ test('waits for the baseline and command before reporting deployment', async () 
       assert.deepEqual(input.command, ['./deploy.sh']);
     },
     sleep: async () => {},
-    now: () => 0
+    now: () => 0,
+    onCreated: async ({ testId }) => {
+      assert.equal(testId, 'test-123');
+      events.push('AUDIT_CREATED');
+    }
   });
 
   assert.equal(output.testId, 'test-123');
   assert.deepEqual(events, [
     'POST',
+    'AUDIT_CREATED',
     'GET',
     'GET',
     'COMMAND',
