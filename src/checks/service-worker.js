@@ -329,25 +329,159 @@ const hasWaitUntilInHandlerSource = handlerSource => {
     return false;
   }
 
+  const details = parseFunctionDetails(handlerSource);
+  if (!details) {
+    return false;
+  }
+
+  return handlerBodyCallsWaitUntil(details.body, details.params[0]);
+};
+
+const parseFunctionDetails = functionSource => {
   const bodyPatterns = [
-    /^(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{([\s\S]*)\}$/,
-    /^(?:async\s+)?\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>\s*\{([\s\S]*)\}$/,
+    /^(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(([^)]*)\)\s*\{([\s\S]*)\}$/,
+    /^(?:async\s+)?\(([^)]*)\)\s*=>\s*\{([\s\S]*)\}$/,
     /^(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>\s*\{([\s\S]*)\}$/,
-    /^(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>\s*([^;]+)$/,
-    /^(?:async\s+)?\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>\s*([^;]+)$/,
+    /^(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(([^)]*)\)\s*=>\s*([^;]+)$/,
+    /^(?:async\s+)?\(([^)]*)\)\s*=>\s*([^;]+)$/,
     /^(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>\s*([^;]+)$/
   ];
 
-  for (const pattern of bodyPatterns) {
-    const match = handlerSource.trim().match(pattern);
-    const eventParam = match?.[1];
-    const body = match?.[2] || '';
-    if (eventParam && new RegExp(String.raw`\b${eventParam}\.waitUntil\s*\(`).test(body)) {
-      return true;
-    }
+  const match = bodyPatterns
+    .map(pattern => functionSource.trim().match(pattern))
+    .find(Boolean);
+
+  if (!match) {
+    return null;
   }
 
-  return false;
+  const params = match[1]
+    .split(',')
+    .map(param => param.trim())
+    .filter(Boolean);
+
+  return { params, body: match[2] || '' };
+};
+
+const handlerBodyCallsWaitUntil = (body, eventParam) => {
+  return Boolean(eventParam && new RegExp(String.raw`\b${eventParam}\.waitUntil\s*\(`).test(body));
+};
+
+const resolveFunctionDeclarationSource = (swCode, functionName) => {
+  const declarationRegex = new RegExp(
+    String.raw`\bfunction\s+${functionName}\s*\(([^)]*)\)\s*\{`,
+    'g'
+  );
+  const match = declarationRegex.exec(swCode);
+
+  if (!match) {
+    return null;
+  }
+
+  const bodyStart = (match.index ?? 0) + match[0].length - 1;
+  const body = getBalancedBlock(swCode, bodyStart);
+
+  return body === null
+    ? null
+    : `function(${match[1]}){${body}}`;
+};
+
+const resolveMethodSource = (swCode, methodName) => {
+  const methodRegex = new RegExp(
+    String.raw`(?:^|[{},;\s])${methodName}\s*\(([^)]*)\)\s*\{`,
+    'g'
+  );
+  const match = methodRegex.exec(swCode);
+
+  if (!match) {
+    return null;
+  }
+
+  const bodyStart = (match.index ?? 0) + match[0].length - 1;
+  const body = getBalancedBlock(swCode, bodyStart);
+
+  return body === null
+    ? null
+    : `function(${match[1]}){${body}}`;
+};
+
+const resolveDelegatedFunctionSource = (swCode, callName) => {
+  const functionName = callName.replace(/^this\./, '');
+
+  return (
+    resolveNamedHandlerSource(swCode, functionName, swCode.length) ||
+    resolveFunctionDeclarationSource(swCode, functionName) ||
+    resolveMethodSource(swCode, functionName)
+  );
+};
+
+const hasDelegatedWaitUntil = (
+  swCode,
+  body,
+  eventParam,
+  depth = 0,
+  seen = new Set()
+) => {
+  if (!eventParam || depth >= 3) {
+    return false;
+  }
+
+  const callRegex = new RegExp(
+    String.raw`\b((?:this\.)?[A-Za-z_$][\w$]*)\s*\(\s*${eventParam}\b`,
+    'g'
+  );
+
+  return [...body.matchAll(callRegex)].some(match => {
+    const callName = match[1];
+    const seenKey = `${callName}:${depth}`;
+
+    if (callName === 'waitUntil' || seen.has(seenKey)) {
+      return false;
+    }
+
+    seen.add(seenKey);
+
+    const functionSource = resolveDelegatedFunctionSource(swCode, callName);
+    const details = functionSource ? parseFunctionDetails(functionSource) : null;
+
+    if (!details) {
+      return false;
+    }
+
+    const delegatedEventParam = details.params[0];
+
+    return (
+      handlerBodyCallsWaitUntil(details.body, delegatedEventParam) ||
+      hasDelegatedWaitUntil(swCode, details.body, delegatedEventParam, depth + 1, seen)
+    );
+  });
+};
+
+const hasMethodReferenceDelegatedWaitUntil = (swCode, eventName) => {
+  const listenerRegex = new RegExp(
+    String.raw`addEventListener\s*\(\s*['"\`]${eventName}['"\`]\s*,\s*this\.([A-Za-z_$][\w$]*)`,
+    'g'
+  );
+
+  return [...swCode.matchAll(listenerRegex)].some(listenerMatch => {
+    const methodName = listenerMatch[1];
+    const methodRegex = new RegExp(
+      String.raw`\b${methodName}\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{[\s\S]{0,2000}?\b([A-Za-z_$][\w$]*)\s*\(\s*\1\b`,
+      'g'
+    );
+    const methodMatch = methodRegex.exec(swCode);
+
+    if (!methodMatch) {
+      return false;
+    }
+
+    const delegatedFunctionName = methodMatch[2];
+    const delegatedFunctionRegex = new RegExp(
+      String.raw`\bfunction\s+${delegatedFunctionName}\s*\(\s*([A-Za-z_$][\w$]*)[\s\S]{0,120}?\)\s*\{[\s\S]{0,500}?\b\1\.waitUntil\s*\(`
+    );
+
+    return delegatedFunctionRegex.test(swCode);
+  });
 };
 
 const hasPatternInHandlerSource = (handlerSource, pattern) => {
@@ -519,7 +653,7 @@ const parseEventHandler = (swCode, eventName) => {
             cursor += 1;
           }
 
-          const paramMatch = swCode.slice(cursor).match(/^([A-Za-z_$][\w$]*)/);
+          const paramMatch = swCode.slice(cursor).match(/^((?:this\.)?[A-Za-z_$][\w$]*)/);
           if (!paramMatch) {
             continue;
           }
@@ -550,8 +684,18 @@ const parseEventHandler = (swCode, eventName) => {
           }
 
           if (!swCode.startsWith('=>', cursor)) {
-            const handlerSource = resolveNamedHandlerSource(swCode, eventParam, match.index ?? 0);
-            if (handlerSource && hasWaitUntilInHandlerSource(handlerSource)) {
+            const handlerSource = eventParam.startsWith('this.')
+              ? resolveDelegatedFunctionSource(swCode, eventParam)
+              : resolveNamedHandlerSource(swCode, eventParam, match.index ?? 0);
+            const handlerDetails = handlerSource ? parseFunctionDetails(handlerSource) : null;
+
+            if (
+              handlerDetails &&
+              (
+                handlerBodyCallsWaitUntil(handlerDetails.body, handlerDetails.params[0]) ||
+                hasDelegatedWaitUntil(swCode, handlerDetails.body, handlerDetails.params[0])
+              )
+            ) {
               return true;
             }
 
@@ -599,14 +743,26 @@ const parseEventHandler = (swCode, eventName) => {
 
       if (swCode[bodyStart] === '{') {
         const body = getBalancedBlock(swCode, bodyStart);
-        if (body && new RegExp(String.raw`\b${eventParam}\.waitUntil\s*\(`).test(body)) {
+        if (
+          body &&
+          (
+            handlerBodyCallsWaitUntil(body, eventParam) ||
+            hasDelegatedWaitUntil(swCode, body, eventParam)
+          )
+        ) {
           return true;
         }
         continue;
       }
 
       const bodyMatch = swCode.slice(bodyStart).match(/^[^;]+/);
-      if (bodyMatch && new RegExp(String.raw`\b${eventParam}\.waitUntil\s*\(`).test(bodyMatch[0])) {
+      if (
+        bodyMatch &&
+        (
+          handlerBodyCallsWaitUntil(bodyMatch[0], eventParam) ||
+          hasDelegatedWaitUntil(swCode, bodyMatch[0], eventParam)
+        )
+      ) {
         return true;
       }
     }
@@ -616,7 +772,10 @@ const parseEventHandler = (swCode, eventName) => {
 };
 
 const hasEventWaitUntil = (swCode, eventName) => {
-  return parseEventHandler(swCode, eventName);
+  return (
+    parseEventHandler(swCode, eventName) ||
+    hasMethodReferenceDelegatedWaitUntil(swCode, eventName)
+  );
 };
 
 const hasEventPattern = (swCode, eventName, pattern) => {

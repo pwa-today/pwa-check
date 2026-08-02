@@ -250,6 +250,28 @@ test('named handler variables still count when waitUntil is called', () => {
   );
 });
 
+test('delegated install handlers still count when waitUntil is called', () => {
+  assert.equal(
+    hasInstallHandler("function o(e) { e.waitUntil(Promise.resolve()); } const handler = { install(e) { o(e); } }; self.addEventListener('install', event => { handler.install(event); });"),
+    true
+  );
+  assert.equal(
+    hasInstallHandler("function o(e) { e.waitUntil(Promise.resolve()); } const handler = { install(e) { o(e); } }; self.addEventListener('install', event => { this.install(event); });"),
+    true
+  );
+  assert.equal(
+    hasInstallHandler("function o(e, t) { const promise = t(); e.waitUntil(promise); } class Handler { addToCacheList() {}install(e) { return o(e, async () => {}); } } self.addEventListener('install', this.install);"),
+    true
+  );
+});
+
+test('delegated handlers do not count without waitUntil', () => {
+  assert.equal(
+    hasInstallHandler("function o(e) { console.log(e); } const handler = { install(e) { o(e); } }; self.addEventListener('install', event => { this.install(event); });"),
+    false
+  );
+});
+
 test('checkServiceWorker reports push handlers without waitUntil separately', async () => {
   const originalFetch = global.fetch;
 
