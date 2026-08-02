@@ -65,7 +65,7 @@ The CLI prints a list of results with one of three statuses:
 - `fail`
 
 The process exits with a non-zero status if any `fail` result is found, so it fits cleanly into CI and local checks.
-You can also make warnings fail the run, ignore specific warning codes, emit JSON, or set a timeout for each request.
+You can also show only warnings and failures, make warnings fail the run, ignore specific warning codes, emit JSON, or set a timeout for each request.
 
 ## Usage
 
@@ -106,6 +106,7 @@ pwa-check https://example.com
 Flags:
 
 - `--json`: emit machine-readable output
+- `--issues-only`: hide passing checks in terminal output
 - `--fail-on-warn`: treat warnings as failures
 - `--ignore-warn <code>`: exclude a warning code from `--fail-on-warn`
 - `--timeout <ms>`: cap each network request

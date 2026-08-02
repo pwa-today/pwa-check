@@ -63,6 +63,30 @@ test('findServiceWorkerUrls resolves generated urls from function calls', () => 
   ]);
 });
 
+test('findServiceWorkerUrls resolves Workbox Window registrations', () => {
+  const source = `
+    import { Workbox } from 'workbox-window';
+    const wb = new Workbox('/app/sw.js', { scope: '/app/' });
+    wb.register();
+  `;
+
+  assert.deepEqual(findServiceWorkerUrls(source, 'https://example.com/app/'), [
+    'https://example.com/app/sw.js'
+  ]);
+});
+
+test('findServiceWorkerUrls resolves minified Workbox Window registrations', () => {
+  const source = `
+    import('./workbox-window.prod.es5.js')
+      .then(({Workbox:e}) => new e('/ItemWorth/sw.js', { scope: '/ItemWorth/' }))
+      .then(e => e.register());
+  `;
+
+  assert.deepEqual(findServiceWorkerUrls(source, 'https://example.com/ItemWorth/'), [
+    'https://example.com/ItemWorth/sw.js'
+  ]);
+});
+
 test('collectServiceWorkerSources follows importScripts recursively', async () => {
   const originalFetch = global.fetch;
 
@@ -503,6 +527,41 @@ test('checkServiceWorker follows generated Workbox service worker chains', async
           entry.message === 'Service worker does not appear to cache assets'
       )
     );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('checkServiceWorker runs subsequent checks for Workbox Window registrations', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async url => {
+    if (url === 'https://example.com/ItemWorth/assets/index.js') {
+      return new Response(
+        "import('./workbox-window.prod.es5.js').then(({Workbox:e}) => new e('/ItemWorth/sw.js', { scope: '/ItemWorth/' })).then(e => e.register());",
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/ItemWorth/sw.js') {
+      return new Response(
+        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('activate', event => { event.waitUntil(Promise.resolve()); }); self.addEventListener('fetch', () => {}); caches.open('v1');",
+        { status: 200 }
+      );
+    }
+
+    return new Response('', { status: 404 });
+  };
+
+  try {
+    const results = await checkServiceWorker(
+      '<html><head><script src="/ItemWorth/assets/index.js"></script></head><body></body></html>',
+      'https://example.com/ItemWorth/'
+    );
+
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration found: https://example.com/ItemWorth/sw.js'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has fetch event handler'));
+    assert.ok(!results.some(entry => entry.code === 'service-worker.registration.missing'));
   } finally {
     global.fetch = originalFetch;
   }

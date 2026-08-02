@@ -10,11 +10,38 @@ export const findServiceWorkerUrls = (html, pageUrl, resolveBaseUrl = pageUrl) =
     )
   ];
 
-  return matches
+  const nativeRegistrationUrls = matches
     .map(match =>
       resolveServiceWorkerRegistrationUrl(html, resolveBaseUrl, match[1], match.index ?? 0)
     )
     .filter(Boolean);
+
+  return [
+    ...nativeRegistrationUrls,
+    ...findWorkboxWindowServiceWorkerUrls(html, pageUrl)
+  ];
+};
+
+const findWorkboxWindowServiceWorkerUrls = (source, pageUrl) => {
+  if (!/\bWorkbox\b/.test(source)) {
+    return [];
+  }
+
+  const constructorNames = [
+    'Workbox',
+    ...[...source.matchAll(/\bWorkbox\s*:\s*([A-Za-z_$][\w$]*)/g)].map(match => match[1])
+  ];
+
+  return [...new Set(constructorNames)].flatMap(constructorName => {
+    const constructorRegex = new RegExp(
+      `\\bnew\\s+${constructorName}\\s*\\(\\s*(['"\`])([^'"\`]+)\\1`,
+      'g'
+    );
+
+    return [...source.matchAll(constructorRegex)].map(match =>
+      resolveUrl(pageUrl, match[2])
+    );
+  });
 };
 
 const resolveServiceWorkerRegistrationUrl = (source, pageUrl, expression, index = 0) => {

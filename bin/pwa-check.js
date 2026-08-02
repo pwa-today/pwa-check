@@ -3,13 +3,14 @@ import { checkPwa, shouldFailResults, summarizeResults } from '../src/checker.js
 
 const printUsage = () => {
   console.error(
-    'Usage: pwa-check [--json] [--fail-on-warn] [--ignore-warn <code>] [--timeout <ms>] [--insecure-localhost] <url>'
+    'Usage: pwa-check [--json] [--issues-only] [--fail-on-warn] [--ignore-warn <code>] [--timeout <ms>] [--insecure-localhost] <url>'
   );
 };
 
 const parseArgs = argv => {
   const options = {
     json: false,
+    issuesOnly: false,
     failOnWarn: false,
     ignoreWarnCodes: [],
     insecureLocalhost: false,
@@ -22,6 +23,11 @@ const parseArgs = argv => {
 
     if (arg === '--json') {
       options.json = true;
+      continue;
+    }
+
+    if (arg === '--issues-only') {
+      options.issuesOnly = true;
       continue;
     }
 
@@ -131,9 +137,13 @@ if (options.json) {
     )
   );
 } else {
+  const displayResults = options.issuesOnly
+    ? results.filter(result => result.status !== 'pass')
+    : results;
+
   console.log(`\nPWA Check\nChecking ${options.url}\n`);
 
-  for (const result of results) {
+  for (const result of displayResults) {
     const icon =
       result.status === 'pass'
         ? '\x1b[32m✓\x1b[0m'
