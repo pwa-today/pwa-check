@@ -39,11 +39,14 @@ test('parses the explicit audit command', () => {
     'custom',
     '--include',
     'manifest,offline',
+    '--application',
+    'example.com',
     'https://example.com'
   ]);
 
   assert.equal(options.command, 'audit');
   assert.equal(options.profile, 'custom');
+  assert.equal(options.applicationId, 'example.com');
   assert.deepEqual(options.include, [
     'manifest',
     'offline'

@@ -91,7 +91,7 @@ export const parseArgs = (argv) => {
     profile: null,
     include: [],
     exclude: [],
-    projectId: null,
+    applicationId: null,
     minimumScore: undefined,
     failOn: [],
     pollIntervalMs: undefined,
@@ -135,7 +135,7 @@ export const parseArgs = (argv) => {
       ['--profile', 'profile', false],
       ['--include', 'include', true],
       ['--exclude', 'exclude', true],
-      ['--project', 'projectId', false],
+      ['--application', 'applicationId', false],
       ['--minimum-score', 'minimumScore', false],
       ['--fail-on', 'failOn', true],
       ['--poll-interval', 'pollIntervalMs', false],
@@ -218,7 +218,7 @@ const usage = [
   '  --profile <quick|standard|full|custom>',
   '  --include <check-id>',
   '  --exclude <check-id>',
-  '  --project <project-id>',
+  '  --application <hostname>',
   '  --minimum-score <0-100>',
   '  --fail-on <severity>',
   '  --poll-interval <ms>',
@@ -428,7 +428,8 @@ const runAudit = async ({
       environment.PWA_TODAY_IDEMPOTENCY_KEY;
     const buildAuditRequest = () => ({
       url: options.url,
-      projectId: options.projectId ?? auditConfig.projectId,
+      applicationId:
+        options.applicationId ?? auditConfig.applicationId,
       profile: options.profile ?? auditConfig.profile ?? 'standard',
       include,
       exclude,

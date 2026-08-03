@@ -159,7 +159,7 @@ Runtime audit flags:
 - `--profile <quick|standard|full|custom>`
 - `--include <check-id>`: include one or more comma-separated check IDs
 - `--exclude <check-id>`: exclude one or more comma-separated check IDs
-- `--project <project-id>`
+- `--application <hostname>`
 - `--minimum-score <0-100>`
 - `--fail-on <critical|high|medium|low>`
 - `--config <file>`

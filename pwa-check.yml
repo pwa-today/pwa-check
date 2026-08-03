@@ -2,7 +2,7 @@ version: 1
 
 audit:
   # Optional. Defaults to the audited domain.
-  projectId: whatpwacando.today
+  applicationId: whatpwacando.today
 
   # quick, standard, full, or custom
   profile: full
