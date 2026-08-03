@@ -101,3 +101,27 @@ test('classifies authentication errors as exit code 2', async () => {
     }
   );
 });
+
+test('classifies audit allowance errors as exit code 2', async () => {
+  await assert.rejects(
+    runRemoteAudit({
+      apiUrl: 'https://api.example.com',
+      token: 'token',
+      request: {
+        url: 'https://example.com'
+      },
+      fetchFunction: async () => {
+        return jsonResponse({
+          code: 'AUDIT_LIMIT_REACHED',
+          error: 'Your audit allowance has been used.'
+        }, 429);
+      }
+    }),
+    (error) => {
+      assert.equal(error instanceof AuditApiError, true);
+      assert.equal(error.message, 'Your audit allowance has been used.');
+      assert.equal(error.exitCode, 2);
+      return true;
+    }
+  );
+});

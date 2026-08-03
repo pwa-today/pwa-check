@@ -74,7 +74,8 @@ export const requestJson = async ({
     const exitCode = [
       400,
       401,
-      403
+      403,
+      429
     ].includes(response.status)
       ? 2
       : 3;
