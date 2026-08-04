@@ -186,7 +186,6 @@ audit:
   profile: standard
   exclude:
     - push-notifications
-    - persistent-storage
 
 qualityGate:
   minimumScore: 90
@@ -258,7 +257,6 @@ Stable runtime check IDs:
 - `service-worker-update`
 - `service-worker-deployment` (explicit opt-in only)
 - `before-install-prompt`
-- `persistent-storage`
 - `offline-request-retry`
 - `push-notifications`
 
