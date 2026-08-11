@@ -19,11 +19,7 @@ test('fetchText sends browser-like headers', async () => {
     await fetchText('https://example.com/');
 
     assert.equal(capturedOptions.redirect, 'follow');
-    assert.equal(capturedOptions.headers['user-agent'].includes('pwa-check'), false);
-    assert.equal(
-      capturedOptions.headers['user-agent'],
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
-    );
+    assert.equal('user-agent' in capturedOptions.headers, false);
     assert.equal(
       capturedOptions.headers.accept,
       'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
