@@ -1,0 +1,60 @@
+version: 1
+
+audit:
+  # Optional. Defaults to the audited domain.
+  applicationId: whatpwacando.today
+
+  # quick, standard, full, or custom
+  profile: full
+
+  # Add checks not normally included in the selected profile.
+  include: []
+
+  # Remove checks from the selected profile.
+  exclude: []
+
+  # Configuration required by specific checks.
+  options:
+    offline-navigation:
+      series:
+        - - /
+          - /installation
+          - /offline-support
+          - /notifications
+          - /view-transitions
+        - - /
+          - /audit
+          - /email-list
+
+    offline-request-retry:
+      requestUrl: https://g9lcsu3pq0.execute-api.us-east-1.amazonaws.com/contact
+      method: POST
+      requestBody:
+        name: "Danny Moerkerke"
+        email: drmoerkerke@gmail.com
+        message: Offline retry test
+        challenge: 7
+
+    push-notifications:
+      # Omit triggerUrl, subscriptionUrl, and applicationServerKey
+      # to use the synthetic push flow.
+      applicationServerKey: BGByiWdMxciiNJkqcAzGoZpS4JHmhKZsjWXNvte52AqXd_8ACgNL2iFG6L-VLEq3vleg2bM8MuW7Hb3P85cA_Qo
+      triggerUrl: https://ca9akfgcre.execute-api.us-east-1.amazonaws.com/send-message
+      payload:
+        title: PWA runtime audit
+        message: Test notification from PWA Today
+        pushSubscription: $subscription
+
+qualityGate:
+  # The command exits with code 1 below this score.
+  minimumScore: 90
+
+  # The command also exits with code 1 when a failed check has
+  # one of these severities.
+  failOn:
+    - critical
+    - high
+
+reports:
+  json: reports/pwa-audit.json
+  junit: reports/pwa-audit.xml

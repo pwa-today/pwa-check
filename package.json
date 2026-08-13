@@ -1,6 +1,6 @@
 {
   "name": "@pwa-today/pwa-check",
-  "version": "0.0.10",
+  "version": "0.1.0",
   "description": "An automated PWA health check tool",
   "repository": {
     "type": "git",
@@ -17,10 +17,16 @@
   "author": "Danny Moerkerke <danny@dannymoerkerke.nl>",
   "license": "ISC",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   },
   "bin": {
     "pwa-check": "./bin/pwa-check.js"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   }
 }
