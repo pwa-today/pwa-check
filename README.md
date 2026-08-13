@@ -132,7 +132,9 @@ from `--fail-on-warn`.
 ## Paid runtime audits
 
 Paying customers can run the hosted runtime checks with the explicit `audit`
-command. A token never enables paid checks by itself.
+command. A paid plan can be purchased from [https://pwa.today](https://pwa.today).
+
+A token never enables paid checks by itself.
 
 Set the access token in the environment:
 
