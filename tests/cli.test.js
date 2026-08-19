@@ -113,6 +113,67 @@ test('returns the quality-gate exit code for a completed audit', async () => {
   assert.equal(JSON.parse(stdout).audit.auditId, 'audit-123');
 });
 
+test('sends failOnWarnings from the audit configuration', async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), 'pwa-check-cli-')
+  );
+  await writeFile(
+    path.join(directory, 'pwa-check.yml'),
+    [
+      'version: 1',
+      'qualityGate:',
+      '  failOnWarnings: true',
+      ''
+    ].join('\n')
+  );
+  const requests = [];
+  const responses = [
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'queued'
+    }, 202),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'completed',
+      score: 100,
+      qualityGate: {
+        passed: true
+      }
+    }),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'completed',
+      results: []
+    })
+  ];
+
+  await runCli([
+    'audit',
+    '--json',
+    'https://example.com'
+  ], {
+    environment: {
+      PWA_AUDIT_TOKEN: 'token-value'
+    },
+    cwd: directory,
+    fetchFunction: async (url, options) => {
+      requests.push({
+        url,
+        options
+      });
+      return responses.shift();
+    },
+    stdout: () => {}
+  });
+
+  const auditRequest = requests.find(({ url }) => {
+    return url.endsWith('/v1/audits');
+  });
+  const auditBody = JSON.parse(auditRequest.options.body);
+
+  assert.equal(auditBody.qualityGate.failOnWarnings, true);
+});
+
 test('creates a queued audit before orchestrating its deployment', async () => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), 'pwa-check-cli-')

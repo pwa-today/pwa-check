@@ -452,7 +452,8 @@ const runAudit = async ({
         minimumScore:
           options.minimumScore ??
           configuredGate.minimumScore,
-        failOn
+        failOn,
+        failOnWarnings: configuredGate.failOnWarnings
       }),
       source: withoutUndefined({
         ...detectSource(environment),

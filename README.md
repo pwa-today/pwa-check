@@ -194,6 +194,7 @@ qualityGate:
   failOn:
     - critical
     - high
+  failOnWarnings: true
 
 reports:
   junit: reports/pwa-audit.xml

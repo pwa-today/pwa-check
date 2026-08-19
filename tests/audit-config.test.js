@@ -24,6 +24,7 @@ test('loads the default YAML audit configuration', async () => {
       '  profile: quick',
       'qualityGate:',
       '  minimumScore: 95',
+      '  failOnWarnings: true',
       ''
     ].join('\n')
   );
@@ -34,6 +35,7 @@ test('loads the default YAML audit configuration', async () => {
 
   assert.equal(config.audit.profile, 'quick');
   assert.equal(config.qualityGate.minimumScore, 95);
+  assert.equal(config.qualityGate.failOnWarnings, true);
 });
 
 test('rejects unsupported configuration versions', async () => {
