@@ -43,6 +43,8 @@ It checks whether the app defines iOS splash screens using `apple-touch-startup-
 
 These can be present in the HTML or injected by JavaScript.
 
+When startup-image links exist, it also checks for `<meta name="apple-mobile-web-app-capable" content="yes">`, which is required for those images through iOS 26.4.
+
 ### Service worker
 
 It checks whether the app registers a service worker and whether the worker does the work a PWA needs:

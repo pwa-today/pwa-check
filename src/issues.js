@@ -53,6 +53,12 @@ export const issues = {
     fix: 'Add apple-touch-startup-image links for the iOS devices you support.',
     documentation: documentation.ios
   }),
+  'ios.startup-images.mobile-web-app-capable': issue({
+    priority: 'low',
+    impact: 'iOS startup images may not be shown when the installed app launches.',
+    fix: 'Add <meta name="apple-mobile-web-app-capable" content="yes"> until iOS 26.4 is your minimum supported version.',
+    documentation: documentation.ios
+  }),
   'ios.startup-images.portrait': issue({
     priority: 'low',
     impact: 'The launch experience may be unsuitable when the device is in portrait orientation.',

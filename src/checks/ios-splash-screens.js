@@ -56,6 +56,10 @@ const hasStartupImage = source => {
   return /apple-touch-startup-image/i.test(source);
 };
 
+const hasMobileWebAppCapableMeta = html => {
+  return /<meta\b(?=[^>]*\bname\s*=\s*(?:["']apple-mobile-web-app-capable["']|apple-mobile-web-app-capable))(?=[^>]*\bcontent\s*=\s*(?:["']yes["']|yes))[^>]*>/i.test(html);
+};
+
 const hasPortraitStartupImage = source => {
   if (!hasStartupImage(source)) return false;
 
@@ -131,6 +135,20 @@ export const checkIosSplashScreens = async (html, pageUrl, fetchOptions = {}) =>
   const hasLandscape = sources.some(entry => hasLandscapeStartupImage(entry.source));
 
   results.push(result('pass', 'iOS startup image links found', 'ios.startup-images'));
+
+  results.push(
+    hasMobileWebAppCapableMeta(html)
+      ? result(
+        'pass',
+        'Apple mobile web app capability is enabled for iOS startup images',
+        'ios.startup-images.mobile-web-app-capable'
+      )
+      : result(
+        'warn',
+        'iOS startup images need apple-mobile-web-app-capable=yes through iOS 26.4',
+        'ios.startup-images.mobile-web-app-capable'
+      )
+  );
 
   results.push(
     hasPortrait
