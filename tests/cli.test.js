@@ -174,6 +174,57 @@ test('sends failOnWarnings from the audit configuration', async () => {
   assert.equal(auditBody.qualityGate.failOnWarnings, true);
 });
 
+test('sends explicitly allowed browser origins from the audit configuration', async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), 'pwa-check-cli-')
+  );
+  const requests = [];
+
+  await writeFile(
+    path.join(directory, 'pwa-check.yml'),
+    [
+      'version: 1',
+      'audit:',
+      '  allowedOrigins:',
+      '    - https://cdn.example.com',
+      ''
+    ].join('\n')
+  );
+
+  await runCli([
+    'audit',
+    '--json',
+    'https://example.com'
+  ], {
+    environment: {
+      PWA_AUDIT_TOKEN: 'token-value'
+    },
+    cwd: directory,
+    fetchFunction: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        status: 202,
+        json: async () => ({
+          auditId: 'audit-123',
+          status: 'completed',
+          results: []
+        })
+      };
+    },
+    stdout: () => {}
+  });
+
+  const auditRequest = requests.find(({ url }) => {
+    return url.endsWith('/v1/audits');
+  });
+
+  assert.deepEqual(
+    JSON.parse(auditRequest.options.body).allowedOrigins,
+    ['https://cdn.example.com']
+  );
+});
+
 test('creates a queued audit before orchestrating its deployment', async () => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), 'pwa-check-cli-')

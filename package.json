@@ -1,6 +1,6 @@
 {
   "name": "@pwa-today/pwa-check",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "An automated PWA health check tool",
   "repository": {
     "type": "git",

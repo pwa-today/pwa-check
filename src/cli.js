@@ -444,6 +444,7 @@ const runAudit = async ({
       url: options.url,
       applicationId:
         options.applicationId ?? auditConfig.applicationId,
+      allowedOrigins: auditConfig.allowedOrigins,
       profile: options.profile ?? auditConfig.profile ?? 'standard',
       include,
       exclude,
