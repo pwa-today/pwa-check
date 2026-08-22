@@ -12,10 +12,24 @@ const isLocalhostUrl = url => {
   }
 };
 
+const isSsrfBlockedHost = (url, hostname, allowLocalhost) => {
+  if (!allowLocalhost && isLocalhostUrl(url)) return true;
+  return /^169\.254\./.test(hostname) || /^10\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) || /^192\.168\./.test(hostname);
+};
+
 export const fetchWithTimeout = async (
   url,
   { timeoutMs = 15000, headers = {}, insecureLocalhost = false, ...init } = {}
 ) => {
+  let parsedUrl;
+  try { parsedUrl = new URL(url); } catch { throw new Error('Invalid URL'); }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS protocols are allowed');
+  }
+  if (isSsrfBlockedHost(url, parsedUrl.hostname, insecureLocalhost)) {
+    throw new Error('Requests to internal network addresses are not allowed');
+  }
   const controller = timeoutMs > 0 ? new AbortController() : null;
   let timeoutId = null;
   const shouldIgnoreTls = insecureLocalhost && url.startsWith('https://') && isLocalhostUrl(url);
