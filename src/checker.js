@@ -37,7 +37,8 @@ export const checkPwa = async (inputUrl, options = {}) => {
   const pageUrl = normalizeUrl(inputUrl);
   const fetchOptions = {
     timeoutMs: options.timeoutMs,
-    insecureLocalhost: options.insecureLocalhost
+    insecureLocalhost: options.insecureLocalhost,
+    authentication: options.authentication
   };
 
   let html;

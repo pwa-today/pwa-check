@@ -120,6 +120,26 @@ Flags:
 - `--ignore-warn <code>`: exclude a warning code from `--fail-on-warn`
 - `--timeout <ms>`: cap each network request
 - `--insecure-localhost`: allow HTTPS requests to localhost with an invalid certificate
+- `--auth-env <name>`: read origin-scoped bearer/cookie authentication JSON from an environment variable
+- `--auth-file <path>`: read the same authentication JSON from a local file
+
+For a protected PWA, keep the authentication value out of shell history and
+configuration files:
+
+```bash
+export PWA_CHECK_AUTH='{"headers":{"authorization":"Bearer token"}}'
+pwa-check check --auth-env PWA_CHECK_AUTH https://app.example.com
+```
+
+Cookies use the same JSON value:
+
+```json
+{"cookies":[{"name":"session","value":"cookie-value"}]}
+```
+
+Authentication is applied only to requests for the audited origin and is
+removed before a cross-origin redirect. It is never printed or read from
+`pwa-check.yml`.
 
 In terminal output, warnings and failures include their code, priority, impact, suggested
 fix, and documentation URL. Passing checks remain on one line.

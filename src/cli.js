@@ -3,6 +3,10 @@ import {
 } from 'node:fs';
 
 import {
+  parseAuthentication
+} from './authentication.js';
+
+import {
   loadAuditConfig
 } from './audit-config.js';
 import {
@@ -98,7 +102,9 @@ export const parseArgs = (argv) => {
     pollIntervalMs: undefined,
     auditTimeoutMs: undefined,
     apiUrl: null,
-    idempotencyKey: null
+    idempotencyKey: null,
+    authEnv: null,
+    authFile: null
   };
   let index = 0;
 
@@ -148,7 +154,9 @@ export const parseArgs = (argv) => {
       ['--poll-interval', 'pollIntervalMs', false],
       ['--audit-timeout', 'auditTimeoutMs', false],
       ['--api-url', 'apiUrl', false],
-      ['--idempotency-key', 'idempotencyKey', false]
+      ['--idempotency-key', 'idempotencyKey', false],
+      ['--auth-env', 'authEnv', false],
+      ['--auth-file', 'authFile', false]
     ];
     const matched = valueOptions
       .map(([name, property, multiple]) => {
@@ -361,13 +369,24 @@ const printAuditResults = ({
 
 const runFreeCheck = async ({
   options,
+  environment,
   stdout,
   stderr
 }) => {
   try {
+    if (options.authEnv && options.authFile) {
+      throw new TypeError('Use either --auth-env or --auth-file, not both.');
+    }
+
+    const authentication = options.authEnv
+      ? parseAuthentication(environment[options.authEnv])
+      : options.authFile
+        ? parseAuthentication(readFileSync(options.authFile, 'utf8'))
+        : null;
     const results = await checkPwa(options.url, {
       timeoutMs: options.timeoutMs,
-      insecureLocalhost: options.insecureLocalhost
+      insecureLocalhost: options.insecureLocalhost,
+      authentication
     });
     const summary = summarizeResults(results);
 
@@ -690,6 +709,7 @@ export const runCli = async (
 
   return await runFreeCheck({
     options,
+    environment,
     stdout,
     stderr
   });
