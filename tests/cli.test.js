@@ -174,6 +174,56 @@ test('sends failOnWarnings from the audit configuration', async () => {
   assert.equal(auditBody.qualityGate.failOnWarnings, true);
 });
 
+test('sends one-time authentication only in the audit request', async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), 'pwa-check-cli-')
+  );
+  const requests = [];
+  const responses = [
+    jsonResponse({ auditId: 'audit-123', status: 'queued' }, 202),
+    jsonResponse({
+      auditId: 'audit-123',
+      status: 'completed',
+      score: 100,
+      qualityGate: { passed: true }
+    }),
+    jsonResponse({ auditId: 'audit-123', status: 'completed', results: [] })
+  ];
+  let stdout = '';
+
+  const exitCode = await runCli([
+    'audit',
+    '--json',
+    '--auth-env',
+    'PWA_AUDIT_AUTH',
+    'https://example.com'
+  ], {
+    environment: {
+      PWA_AUDIT_TOKEN: 'token-value',
+      PWA_AUDIT_AUTH: JSON.stringify({
+        headers: { authorization: 'Bearer private-token' },
+        cookies: [{ name: 'session', value: 'private-cookie' }]
+      })
+    },
+    cwd: directory,
+    fetchFunction: async (url, options) => {
+      requests.push({ url, options });
+      return responses.shift();
+    },
+    stdout: (value) => {
+      stdout += value;
+    }
+  });
+
+  assert.equal(exitCode, 0);
+  const auditRequest = requests.find(({ url }) => url.endsWith('/v1/audits'));
+  assert.deepEqual(JSON.parse(auditRequest.options.body).authentication, {
+    headers: { authorization: 'Bearer private-token' },
+    cookies: [{ name: 'session', value: 'private-cookie' }]
+  });
+  assert.doesNotMatch(stdout, /private-token|private-cookie/);
+});
+
 test('sends explicitly allowed browser origins from the audit configuration', async () => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), 'pwa-check-cli-')

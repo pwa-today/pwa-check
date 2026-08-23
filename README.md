@@ -192,10 +192,17 @@ Runtime audit flags:
 - `--api-url <url>`: override the default `https://api.pwa.today`
 - `--idempotency-key <key>`
 - `--json`
+- `--auth-env <name>` or `--auth-file <path>`: provide one-time bearer/cookie credentials for this hosted audit
 
 The token can only be supplied through `PWA_AUDIT_TOKEN`. The API URL and
 idempotency key can also be set with `PWA_TODAY_API_URL` and
 `PWA_TODAY_IDEMPOTENCY_KEY`.
+
+One-time audit authentication uses the same JSON shape as `check`, but it is
+sent only when the audit is created. The service encrypts it, applies it only
+to the target origin, and expires it after the audit. It is never read from
+`pwa-check.yml` or printed. Files passed to `--auth-file` must not be readable
+by group or others.
 
 ### Audit configuration
 

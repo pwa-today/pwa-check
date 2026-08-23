@@ -1,5 +1,6 @@
 import {
-  readFileSync
+  readFileSync,
+  statSync
 } from 'node:fs';
 
 import {
@@ -34,6 +35,26 @@ const packageData = JSON.parse(
 );
 
 const DEPLOYMENT_CHECK = 'service-worker-deployment';
+
+const getAuthentication = (options, environment) => {
+  if (options.authEnv && options.authFile) {
+    throw new TypeError('Use either --auth-env or --auth-file, not both.');
+  }
+
+  if (options.authEnv) {
+    return parseAuthentication(environment[options.authEnv]);
+  }
+
+  if (!options.authFile) {
+    return null;
+  }
+
+  if ((statSync(options.authFile).mode & 0o077) !== 0) {
+    throw new TypeError('--auth-file must not be readable by group or others.');
+  }
+
+  return parseAuthentication(readFileSync(options.authFile, 'utf8'));
+};
 
 const splitList = (value) => {
   return value
@@ -374,15 +395,7 @@ const runFreeCheck = async ({
   stderr
 }) => {
   try {
-    if (options.authEnv && options.authFile) {
-      throw new TypeError('Use either --auth-env or --auth-file, not both.');
-    }
-
-    const authentication = options.authEnv
-      ? parseAuthentication(environment[options.authEnv])
-      : options.authFile
-        ? parseAuthentication(readFileSync(options.authFile, 'utf8'))
-        : null;
+    const authentication = getAuthentication(options, environment);
     const results = await checkPwa(options.url, {
       timeoutMs: options.timeoutMs,
       insecureLocalhost: options.insecureLocalhost,
@@ -433,6 +446,7 @@ const runAudit = async ({
   }
 
   try {
+    const authentication = getAuthentication(options, environment);
     const config = await loadAuditConfig({
       filename: options.config,
       cwd
@@ -478,7 +492,8 @@ const runAudit = async ({
       source: withoutUndefined({
         ...detectSource(environment),
         cliVersion: packageData.version
-      })
+      }),
+      ...(authentication ? { authentication } : {})
     });
     const onAuditStatus = options.json
       ? () => {}

@@ -43,9 +43,16 @@ export const normalizeAuthentication = (value) => {
   }
 
   const authentication = {
-    ...(authorization ? { authorization } : {}),
+    ...(authorization ? {
+      headers: {
+        authorization
+      }
+    } : {}),
     ...(cookies ? {
-      cookie: cookies.map(({ name, value: cookieValue }) => `${name}=${cookieValue}`).join('; ')
+      cookies: cookies.map(({ name, value: cookieValue }) => ({
+        name,
+        value: cookieValue
+      }))
     } : {})
   };
 
@@ -79,11 +86,13 @@ export const getScopedAuthenticationHeaders = (url, origin, authentication) => {
   }
 
   return {
-    ...(authentication.authorization ? {
-      authorization: authentication.authorization
+    ...(authentication.headers?.authorization ? {
+      authorization: authentication.headers.authorization
     } : {}),
-    ...(authentication.cookie ? {
-      cookie: authentication.cookie
+    ...(authentication.cookies ? {
+      cookie: authentication.cookies
+        .map(({ name, value }) => `${name}=${value}`)
+        .join('; ')
     } : {})
   };
 };

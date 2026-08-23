@@ -33,6 +33,19 @@ test('applies authentication only to the audited origin', () => {
   );
 });
 
+test('keeps the API authentication structure for hosted audits', () => {
+  assert.deepEqual(
+    parseAuthentication(JSON.stringify({
+      headers: { authorization: 'Bearer audit-token' },
+      cookies: [{ name: 'session', value: 'cookie-value' }]
+    })),
+    {
+      headers: { authorization: 'Bearer audit-token' },
+      cookies: [{ name: 'session', value: 'cookie-value' }]
+    }
+  );
+});
+
 test('rejects unsupported authentication fields', () => {
   assert.throws(
     () => parseAuthentication(JSON.stringify({
