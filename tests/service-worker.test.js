@@ -494,6 +494,50 @@ test('checkServiceWorker does not warn when skipWaiting is outside the install h
   }
 });
 
+test('checkServiceWorker does not warn when skipWaiting is mentioned in an install handler comment', async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async url => {
+    if (url === 'https://example.com/') {
+      return new Response(
+        '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/registerSW.js') {
+      return new Response(
+        "if('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }",
+        { status: 200 }
+      );
+    }
+
+    if (url === 'https://example.com/sw.js') {
+      return new Response(
+        "self.addEventListener('install', event => { event.waitUntil(Promise.resolve()); // Deliberately no self.skipWaiting() here.\n}); self.addEventListener('message', event => { if (event.data === 'SKIP_WAITING') self.skipWaiting(); });",
+        { status: 200 }
+      );
+    }
+
+    return new Response('', { status: 404 });
+  };
+
+  try {
+    const results = await checkServiceWorker(
+      '<html><head><script src="/registerSW.js"></script></head><body></body></html>',
+      'https://example.com/'
+    );
+
+    assert.ok(
+      !results.some(
+        entry => entry.code === 'service-worker.install.skip-waiting'
+      )
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('checkServiceWorker follows generated Workbox service worker chains', async () => {
   const originalFetch = global.fetch;
 

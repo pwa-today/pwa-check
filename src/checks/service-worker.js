@@ -484,6 +484,73 @@ const hasMethodReferenceDelegatedWaitUntil = (swCode, eventName) => {
   });
 };
 
+const withoutComments = source => {
+  let result = '';
+  let inSingle = false;
+  let inDouble = false;
+  let inTemplate = false;
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const nextChar = source[index + 1];
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if ((inSingle || inDouble || inTemplate) && char === '\\') {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (!inDouble && !inTemplate && char === "'") {
+      inSingle = !inSingle;
+      result += char;
+      continue;
+    }
+
+    if (!inSingle && !inTemplate && char === '"') {
+      inDouble = !inDouble;
+      result += char;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && char === '`') {
+      inTemplate = !inTemplate;
+      result += char;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && !inTemplate && char === '/' && nextChar === '/') {
+      index = source.indexOf('\n', index + 2);
+      if (index === -1) {
+        break;
+      }
+
+      result += '\n';
+      continue;
+    }
+
+    if (!inSingle && !inDouble && !inTemplate && char === '/' && nextChar === '*') {
+      index = source.indexOf('*/', index + 2);
+      if (index === -1) {
+        break;
+      }
+
+      index += 1;
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+};
+
 const hasPatternInHandlerSource = (handlerSource, pattern) => {
   if (!handlerSource) {
     return false;
@@ -495,14 +562,16 @@ const hasPatternInHandlerSource = (handlerSource, pattern) => {
   );
 
   if (blockMatch) {
-    return pattern.test(blockMatch[1] || '');
+    return pattern.test(withoutComments(blockMatch[1] || ''));
   }
 
   const expressionMatch = trimmedHandlerSource.match(
     /^(?:async\s+)?(?:\(\s*[A-Za-z_$][\w$]*\s*\)|[A-Za-z_$][\w$]*)\s*=>\s*([\s\S]+)$/
   );
 
-  return expressionMatch ? pattern.test(expressionMatch[1] || '') : false;
+  return expressionMatch
+    ? pattern.test(withoutComments(expressionMatch[1] || ''))
+    : false;
 };
 
 const resolveNamedHandlerSource = (swCode, handlerName, beforeIndex) => {
