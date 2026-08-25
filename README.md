@@ -131,8 +131,6 @@ export PWA_CHECK_AUTH='{"headers":{"authorization":"Bearer token"}}'
 pwa-check check --auth-env PWA_CHECK_AUTH https://app.example.com
 ```
 
-Cookies use the same JSON value:
-
 ```json
 {"cookies":[{"name":"session","value":"cookie-value"}]}
 ```
@@ -192,7 +190,7 @@ Runtime audit flags:
 - `--api-url <url>`: override the default `https://api.pwa.today`
 - `--idempotency-key <key>`
 - `--json`
-- `--auth-env <name>` or `--auth-file <path>`: provide one-time bearer/cookie credentials for this hosted audit
+- `--auth-env <name>` or `--auth-file <path>`: provide one-time bearer, cookie, or session-storage credentials for this hosted audit
 
 The token can only be supplied through `PWA_AUDIT_TOKEN`. The API URL and
 idempotency key can also be set with `PWA_TODAY_API_URL` and
@@ -203,6 +201,20 @@ sent only when the audit is created. The service encrypts it, applies it only
 to the target origin, and expires it after the audit. It is never read from
 `pwa-check.yml` or printed. Files passed to `--auth-file` must not be readable
 by group or others.
+
+Hosted audits also support session storage. Each storage value must be a
+string:
+
+```json
+{
+  "sessionStorage": {
+    "app-session": "{\"accessToken\":\"token\"}"
+  }
+}
+```
+
+The local `check` command uses direct HTTP requests, so session-storage
+authentication is supported only by `pwa-check audit`.
 
 ### Audit configuration
 

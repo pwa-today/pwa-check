@@ -1,7 +1,7 @@
-const MAX_AUTHENTICATION_BYTES = 4096;
+const MAX_AUTHENTICATION_BYTES = 16384;
 
 const invalidAuthentication = () => {
-  throw new TypeError('Authentication must contain a supported bearer header or cookie.');
+  throw new TypeError('Authentication must contain a bearer header, cookie or session storage.');
 };
 
 export const normalizeAuthentication = (value) => {
@@ -15,6 +15,7 @@ export const normalizeAuthentication = (value) => {
 
   const authorization = value.headers?.authorization;
   const cookies = value.cookies;
+  const sessionStorage = value.sessionStorage;
 
   if (
     authorization !== undefined &&
@@ -38,7 +39,26 @@ export const normalizeAuthentication = (value) => {
     invalidAuthentication();
   }
 
-  if (!authorization && !cookies) {
+  if (
+    sessionStorage !== undefined &&
+    (
+      !sessionStorage ||
+      typeof sessionStorage !== 'object' ||
+      Array.isArray(sessionStorage) ||
+      Object.keys(sessionStorage).length === 0 ||
+      Object.keys(sessionStorage).length > 10 ||
+      Object.entries(sessionStorage).some(([key, storageValue]) => (
+        key.length === 0 ||
+        key.length > 200 ||
+        typeof storageValue !== 'string' ||
+        storageValue.length > 8192
+      ))
+    )
+  ) {
+    invalidAuthentication();
+  }
+
+  if (!authorization && !cookies && !sessionStorage) {
     invalidAuthentication();
   }
 
@@ -53,7 +73,8 @@ export const normalizeAuthentication = (value) => {
         name,
         value: cookieValue
       }))
-    } : {})
+    } : {}),
+    ...(sessionStorage ? { sessionStorage } : {})
   };
 
   if (Buffer.byteLength(JSON.stringify(authentication), 'utf8') > MAX_AUTHENTICATION_BYTES) {

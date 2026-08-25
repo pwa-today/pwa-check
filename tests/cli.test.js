@@ -69,6 +69,30 @@ test('requires the audit token', async () => {
   assert.match(stderr, /PWA_AUDIT_TOKEN/);
 });
 
+test('rejects session storage authentication for a local check', async () => {
+  let stderr = '';
+  const exitCode = await runCli([
+    'check',
+    '--auth-env',
+    'PWA_CHECK_AUTH',
+    'https://example.com'
+  ], {
+    environment: {
+      PWA_CHECK_AUTH: JSON.stringify({
+        sessionStorage: {
+          'app-session': '{"accessToken":"private-token"}'
+        }
+      })
+    },
+    stderr: (value) => {
+      stderr += value;
+    }
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr, /hosted audit command/);
+});
+
 test('returns the quality-gate exit code for a completed audit', async () => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), 'pwa-check-cli-')
@@ -202,7 +226,10 @@ test('sends one-time authentication only in the audit request', async () => {
       PWA_AUDIT_TOKEN: 'token-value',
       PWA_AUDIT_AUTH: JSON.stringify({
         headers: { authorization: 'Bearer private-token' },
-        cookies: [{ name: 'session', value: 'private-cookie' }]
+        cookies: [{ name: 'session', value: 'private-cookie' }],
+        sessionStorage: {
+          'app-session': '{"accessToken":"private-token"}'
+        }
       })
     },
     cwd: directory,
@@ -219,7 +246,10 @@ test('sends one-time authentication only in the audit request', async () => {
   const auditRequest = requests.find(({ url }) => url.endsWith('/v1/audits'));
   assert.deepEqual(JSON.parse(auditRequest.options.body).authentication, {
     headers: { authorization: 'Bearer private-token' },
-    cookies: [{ name: 'session', value: 'private-cookie' }]
+    cookies: [{ name: 'session', value: 'private-cookie' }],
+    sessionStorage: {
+      'app-session': '{"accessToken":"private-token"}'
+    }
   });
   assert.doesNotMatch(stdout, /private-token|private-cookie/);
 });

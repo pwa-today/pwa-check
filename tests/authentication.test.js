@@ -46,6 +46,21 @@ test('keeps the API authentication structure for hosted audits', () => {
   );
 });
 
+test('accepts session storage authentication for hosted audits', () => {
+  assert.deepEqual(
+    parseAuthentication(JSON.stringify({
+      sessionStorage: {
+        'app-session': '{"accessToken":"private-token"}'
+      }
+    })),
+    {
+      sessionStorage: {
+        'app-session': '{"accessToken":"private-token"}'
+      }
+    }
+  );
+});
+
 test('rejects unsupported authentication fields', () => {
   assert.throws(
     () => parseAuthentication(JSON.stringify({

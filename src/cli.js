@@ -396,6 +396,13 @@ const runFreeCheck = async ({
 }) => {
   try {
     const authentication = getAuthentication(options, environment);
+
+    if (authentication?.sessionStorage) {
+      throw new TypeError(
+        'Session storage authentication is supported only by the hosted audit command.'
+      );
+    }
+
     const results = await checkPwa(options.url, {
       timeoutMs: options.timeoutMs,
       insecureLocalhost: options.insecureLocalhost,
