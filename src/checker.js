@@ -3,6 +3,7 @@ import { checkIosSplashScreens } from './checks/ios-splash-screens.js';
 import { checkServiceWorker } from './checks/service-worker.js';
 import { checkViewport } from './checks/viewport.js';
 import { fetchText } from './utils/fetch-text.js';
+import { createSafePublicFetch } from './utils/public-fetch.js';
 import { result } from './utils/result.js';
 import { normalizeUrl } from './utils/url.js';
 
@@ -35,10 +36,14 @@ export const shouldFailResults = (results, { failOnWarn = false, ignoreWarnCodes
 export const checkPwa = async (inputUrl, options = {}) => {
   const results = [];
   const pageUrl = normalizeUrl(inputUrl);
+  const fetchFunction = options.publicOnly
+    ? createSafePublicFetch()
+    : undefined;
   const fetchOptions = {
     timeoutMs: options.timeoutMs,
     insecureLocalhost: options.insecureLocalhost,
-    authentication: options.authentication
+    authentication: options.authentication,
+    ...(fetchFunction ? { fetchFunction } : {})
   };
 
   let html;

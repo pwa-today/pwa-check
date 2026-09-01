@@ -23,6 +23,7 @@ export const fetchWithTimeout = async (
     headers = {},
     insecureLocalhost = false,
     authentication = null,
+    fetchFunction = fetch,
     ...init
   } = {}
 ) => {
@@ -43,7 +44,7 @@ export const fetchWithTimeout = async (
     };
 
     if (!authentication) {
-      return await fetch(requestUrl, {
+      return await fetchFunction(requestUrl, {
         redirect: 'follow',
         headers: requestHeaders,
         signal: controller?.signal,
@@ -55,7 +56,7 @@ export const fetchWithTimeout = async (
     let currentUrl = requestUrl;
 
     for (let redirects = 0; redirects <= 5; redirects += 1) {
-      response = await fetch(currentUrl, {
+      response = await fetchFunction(currentUrl, {
         redirect: 'manual',
         headers: {
           ...browserLikeHeaders,

@@ -1,6 +1,6 @@
 {
   "name": "@pwa-today/pwa-check",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "An automated PWA health check tool",
   "repository": {
     "type": "git",
@@ -26,7 +26,9 @@
   "bin": {
     "pwa-check": "./bin/pwa-check.js"
   },
+  "exports": "./src/checker.js",
   "dependencies": {
+    "undici": "^6.28.0",
     "yaml": "^2.9.0"
   }
 }
