@@ -1,7 +1,7 @@
 import { lookup as defaultLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
-import { Agent } from 'undici';
+import { Agent, fetch } from 'undici';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const DEFAULT_MAX_REDIRECTS = 5;
@@ -259,7 +259,7 @@ const createPinnedLookup = ({ address, family }) => {
 };
 
 export const createSafePublicFetch = ({
-  fetchFunction = globalThis.fetch,
+  fetchFunction = fetch,
   lookup = defaultLookup,
   allowedMethods = ['GET', 'HEAD'],
   createDispatcher = (address) => new Agent({
@@ -360,4 +360,3 @@ export const createSafePublicFetch = ({
 
   return safeFetch;
 };
-

@@ -1,10 +1,29 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { MockAgent } from 'undici';
+
 import {
   createSafePublicFetch,
   UnsafeUrlError
 } from '../src/utils/public-fetch.js';
+
+test('uses the default package fetch with an Undici dispatcher', async () => {
+  const dispatcher = new MockAgent();
+  const pool = dispatcher.get('https://example.com');
+
+  dispatcher.disableNetConnect();
+  pool.intercept({ path: '/', method: 'GET' }).reply(200, 'PWA check');
+
+  const safeFetch = createSafePublicFetch({
+    lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    createDispatcher: () => dispatcher
+  });
+  const response = await safeFetch('https://example.com/');
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'PWA check');
+});
 
 test('rejects a private generic-check target before requesting it', async () => {
   const safeFetch = createSafePublicFetch({
