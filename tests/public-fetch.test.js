@@ -25,6 +25,22 @@ test('uses the default package fetch with an Undici dispatcher', async () => {
   assert.equal(await response.text(), 'PWA check');
 });
 
+test('allows the default request budget required for repeated script analysis', async () => {
+  const safeFetch = createSafePublicFetch({
+    lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    fetchFunction: async () => new Response('PWA check')
+  });
+
+  await Promise.all(
+    Array.from({ length: 120 }, () => safeFetch('https://example.com/'))
+  );
+
+  await assert.rejects(
+    safeFetch('https://example.com/'),
+    /too many remote resources/
+  );
+});
+
 test('rejects a private generic-check target before requesting it', async () => {
   const safeFetch = createSafePublicFetch({
     fetchFunction: async () => assert.fail('The private target must not be requested.')
