@@ -1039,6 +1039,7 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
   const serviceWorkerUrls = sources.flatMap(({ source }) =>
     findServiceWorkerUrls(source, pageUrl, pageUrl)
   );
+  const hasResolvedRegistration = serviceWorkerUrls.length > 0;
 
   if (serviceWorkerUrls.length === 0) {
     const hasRegistrationHint = sources.some(({ source }) =>
@@ -1051,6 +1052,19 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
 
     if (conventionalServiceWorkerUrl) {
       serviceWorkerUrls.push(conventionalServiceWorkerUrl);
+      results.push(
+        hasRegistrationHint
+          ? result(
+              'warn',
+              `Service worker registration code was found, but its URL could not be resolved; inspecting a possible service worker at ${conventionalServiceWorkerUrl}`,
+              'service-worker.registration.dynamic-unresolved'
+            )
+          : result(
+              'warn',
+              `A service worker appears to exist at ${conventionalServiceWorkerUrl}, but registration code could not be found`,
+              'service-worker.registration.conventional-only'
+            )
+      );
     }
 
     if (serviceWorkerUrls.length === 0 && hasRegistrationHint) {
@@ -1071,9 +1085,11 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
     return results;
   }
 
-  results.push(
-    result('pass', `Service worker registration found: ${serviceWorkerUrls[0]}`, 'service-worker.registration.found')
-  );
+  if (hasResolvedRegistration) {
+    results.push(
+      result('pass', `Service worker registration code found: ${serviceWorkerUrls[0]}`, 'service-worker.registration.found')
+    );
+  }
 
   const swSources = await collectServiceWorkerSources(serviceWorkerUrls[0], new Set(), fetchOptions);
   const swCode = swSources.map(({ source }) => source).join('\n');

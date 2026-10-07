@@ -625,7 +625,7 @@ test('checkServiceWorker runs subsequent checks for Workbox Window registrations
       'https://example.com/ItemWorth/'
     );
 
-    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration found: https://example.com/ItemWorth/sw.js'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration code found: https://example.com/ItemWorth/sw.js'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has fetch event handler'));
     assert.ok(!results.some(entry => entry.code === 'service-worker.registration.missing'));
   } finally {
@@ -667,7 +667,7 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
       'https://example.com/'
     );
 
-    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration found: https://example.com/sw.js'));
+    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration code found: https://example.com/sw.js'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has install event handler' && entry.code === 'service-worker.install'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker install handler calls waitUntil'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has activate event handler'));
@@ -684,7 +684,7 @@ test('checkServiceWorker runs subsequent checks when registration url is resolve
   }
 });
 
-test('checkServiceWorker falls back to conventional sw.js when registration is generated', async () => {
+test('checkServiceWorker warns when a conventional worker exists without registration code', async () => {
   const originalFetch = global.fetch;
 
   global.fetch = async url => {
@@ -704,7 +704,8 @@ test('checkServiceWorker falls back to conventional sw.js when registration is g
       'https://example.com/'
     );
 
-    assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker registration found: https://example.com/sw.js'));
+    assert.ok(results.some(entry => entry.status === 'warn' && entry.message === 'A service worker appears to exist at https://example.com/sw.js, but registration code could not be found'));
+    assert.ok(!results.some(entry => entry.code === 'service-worker.registration.found'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker install handler calls waitUntil'));
     assert.ok(results.some(entry => entry.status === 'pass' && entry.message === 'Service worker has fetch event handler'));
   } finally {
@@ -750,4 +751,26 @@ test('checkServiceWorker reports when a registration is present but no static ur
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+['/sw.js', '/service-worker.js'].forEach(workerPath => {
+  test(`unresolved registration retains its warning when ${workerPath} is discovered`, async () => {
+    const results = await checkServiceWorker(
+      '<script>navigator.serviceWorker.register(getWorkerUrl());</script>',
+      'https://example.com/',
+      {
+        fetchFunction: async url => new Response(
+          url === `https://example.com${workerPath}`
+            ? "self.addEventListener('fetch', () => {});"
+            : '',
+          { status: url === `https://example.com${workerPath}` ? 200 : 404 }
+        )
+      }
+    );
+
+    assert.ok(results.some(entry => entry.code === 'service-worker.registration.dynamic-unresolved' && entry.status === 'warn'));
+    assert.ok(!results.some(entry => entry.code === 'service-worker.registration.found'));
+    assert.ok(!results.some(entry => entry.code === 'service-worker.registration.conventional-only'));
+    assert.ok(results.some(entry => entry.code === 'service-worker.fetch' && entry.status === 'pass'));
+  });
 });

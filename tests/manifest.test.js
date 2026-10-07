@@ -140,6 +140,19 @@ test('checkManifestMembers accepts a valid manifest', async () => {
   assert.ok(hasResult(results, 'pass', 'Manifest handle_links is valid: preferred'));
 });
 
+test('screenshot MIME types accept WebP while still rejecting unsupported types', async () => {
+  const manifest = createValidManifest();
+  manifest.screenshots[0].src = '/screenshots/home-wide.webp';
+  manifest.screenshots[0].type = 'image/webp';
+
+  let results = await checkManifestMembers(manifest);
+  assert.ok(hasResult(results, 'pass', 'Manifest screenshots use supported image types'));
+
+  manifest.screenshots[1].type = 'image/gif';
+  results = await checkManifestMembers(manifest);
+  assert.ok(hasResult(results, 'warn', 'Manifest screenshots use unsupported image types'));
+});
+
 test('recommended icon size warnings include remediation details', async () => {
   const manifest = createValidManifest();
   manifest.icons = manifest.icons.filter(
@@ -252,34 +265,88 @@ test('installability criteria require an allowed display mode', async () => {
   assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
 });
 
-test('installability criteria require at least one icon sized 144px or larger', async () => {
-  const manifest = createValidManifest();
-  manifest.icons = [
-    {
-      src: '/icons/icon-144.png',
-      sizes: '144x144',
-      type: 'image/png'
-    }
-  ];
+['standalone', 'minimal-ui', 'fullscreen'].forEach(display => {
+  test(`installability criteria accept display ${display}`, async () => {
+    const manifest = createValidManifest();
+    manifest.display = display;
 
-  const results = await checkManifestMembers(manifest);
+    const results = await checkManifestMembers(manifest);
 
-  assert.ok(hasResult(results, 'pass', 'PWA meets installability criteria'));
+    assert.ok(hasResult(results, 'pass', 'PWA meets installability criteria'));
+  });
 });
 
-test('installability criteria warn when all icons are smaller than 144px', async () => {
-  const manifest = createValidManifest();
-  manifest.icons = [
-    {
-      src: '/icons/icon-128.png',
-      sizes: '128x128',
-      type: 'image/png'
-    }
-  ];
+['standalone', 'minimal-ui', 'fullscreen', 'tabbed', 'window-controls-overlay'].forEach(display => {
+  [undefined, 'browser'].forEach(fallback => {
+    test(`installability criteria accept override ${display} with display ${fallback}`, async () => {
+      const manifest = createValidManifest();
+      manifest.display = fallback;
+      manifest.display_override = ['unsupported', display];
 
-  const results = await checkManifestMembers(manifest);
+      const results = await checkManifestMembers(manifest);
 
-  assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
+      assert.ok(hasResult(results, 'pass', 'PWA meets installability criteria'));
+    });
+  });
+});
+
+['tabbed', 'window-controls-overlay', 'browser', undefined].forEach(display => {
+  test(`installability criteria reject display ${display} without a supported override`, async () => {
+    const manifest = createValidManifest();
+    manifest.display = display;
+    manifest.display_override = ['browser'];
+
+    const results = await checkManifestMembers(manifest);
+
+    assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
+  });
+});
+
+['standalone', null, {}, []].forEach(override => {
+  test(`installability criteria handle invalid or empty override ${JSON.stringify(override)}`, async () => {
+    const manifest = createValidManifest();
+    manifest.display_override = override;
+
+    let results = await checkManifestMembers(manifest);
+    assert.ok(hasResult(results, 'pass', 'PWA meets installability criteria'));
+
+    manifest.display = 'browser';
+    results = await checkManifestMembers(manifest);
+    assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
+  });
+});
+
+['1x1', '32x64', '128x128', '144x144', 'any', undefined].forEach(sizes => {
+  test(`installability criteria accept icon sizes ${sizes}`, async () => {
+    const manifest = createValidManifest();
+    manifest.icons = [{ src: '/icons/icon.png', sizes, type: 'image/png' }];
+
+    const results = await checkManifestMembers(manifest);
+
+    assert.ok(hasResult(results, 'pass', 'PWA meets installability criteria'));
+  });
+});
+
+[undefined, [], [null], [{}], [{ src: '' }]].forEach(icons => {
+  test(`installability criteria require an icon source: ${JSON.stringify(icons)}`, async () => {
+    const manifest = createValidManifest();
+    manifest.icons = icons;
+
+    const results = await checkManifestMembers(manifest);
+
+    assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
+  });
+});
+
+[undefined, '', 123].forEach(startUrl => {
+  test(`installability criteria require start_url: ${startUrl}`, async () => {
+    const manifest = createValidManifest();
+    manifest.start_url = startUrl;
+
+    const results = await checkManifestMembers(manifest);
+
+    assert.ok(hasResult(results, 'warn', 'PWA does not meet installability criteria'));
+  });
 });
 
 test('installability criteria accept name when short_name is missing', async () => {
@@ -308,6 +375,37 @@ test('icons should include maskable purpose for each icon size', async () => {
   assert.ok(
     hasResult(results, 'warn', 'Manifest is missing maskable icons for these sizes: 192x192')
   );
+});
+
+['any maskable', 'maskable any', ' any\tmaskable '].forEach(purpose => {
+  test(`combined icon purpose ${JSON.stringify(purpose)} counts as maskable and warns about padding`, async () => {
+    const manifest = createValidManifest();
+    manifest.icons = manifest.icons.map(icon => ({ ...icon, purpose }));
+
+    const results = await checkManifestMembers(manifest);
+
+    assert.ok(hasResult(results, 'pass', 'Manifest includes maskable icons for each icon size'));
+    const warnings = results.filter(entry => entry.code === 'manifest.icons.combined-purposes');
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].status, 'warn');
+    assert.match(warnings[0].message, /discouraged.*too much or too little padding/);
+    assert.match(warnings[0].fix, /separate icons/);
+  });
+});
+
+[undefined, 'any', 'maskable', 'not-maskable', 123].forEach(purpose => {
+  test(`icon purpose ${purpose} does not trigger the combined-purpose warning`, async () => {
+    const manifest = createValidManifest();
+    manifest.icons = manifest.icons.map(icon => ({ ...icon, purpose }));
+
+    const results = await checkManifestMembers(manifest);
+
+    assert.equal(results.some(entry => entry.code === 'manifest.icons.combined-purposes'), false);
+    assert.equal(
+      results.find(entry => entry.code === 'manifest.icons.maskable').status,
+      purpose === 'maskable' ? 'pass' : 'warn'
+    );
+  });
 });
 
 test('icons should require maskable purpose for canonical icon sizes only', async () => {

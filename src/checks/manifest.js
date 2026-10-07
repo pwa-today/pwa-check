@@ -248,9 +248,12 @@ const hasManifestInstallabilityCriteria = manifest => {
   const hasName =
     (typeof manifest.short_name === 'string' && manifest.short_name.length > 0) ||
     (typeof manifest.name === 'string' && manifest.name.length > 0);
-  const hasDisplay = ['fullscreen', 'standalone', 'minimal-ui', 'window-controls-overlay'].includes(
-    manifest.display
-  );
+  const installableDisplays = ['fullscreen', 'standalone', 'minimal-ui'];
+  const hasDisplay = installableDisplays.includes(manifest.display) ||
+    (Array.isArray(manifest.display_override) &&
+      manifest.display_override.some(display =>
+        [...installableDisplays, 'tabbed', 'window-controls-overlay'].includes(display)
+      ));
   const hasStartUrl = typeof manifest.start_url === 'string' && manifest.start_url.length > 0;
   const hasPreferRelatedApplications =
     manifest.prefer_related_applications === undefined ||
@@ -258,12 +261,7 @@ const hasManifestInstallabilityCriteria = manifest => {
 
   const hasInstallableIcon = Array.isArray(manifest.icons)
     ? manifest.icons.some(icon =>
-        typeof icon?.sizes === 'string' &&
-        icon.sizes.split(/\s+/).some(size => {
-          const parsed = parseSize(size);
-
-          return parsed && parsed.width >= 144 && parsed.height >= 144;
-        })
+        typeof icon?.src === 'string' && icon.src.length > 0
       )
     : false;
 
@@ -557,7 +555,7 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
     );
 
     const invalidScreenshotTypes = manifest.screenshots.filter(
-      screenshot => !['image/png', 'image/jpg', 'image/jpeg'].includes(screenshot?.type)
+      screenshot => !['image/png', 'image/jpg', 'image/jpeg', 'image/webp'].includes(screenshot?.type)
     );
 
     results.push(
@@ -702,7 +700,8 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
       return !manifest.icons.some(
         icon =>
           icon &&
-          icon.purpose === 'maskable' &&
+          typeof icon.purpose === 'string' &&
+          icon.purpose.split(/\s+/).includes('maskable') &&
           typeof icon.sizes === 'string' &&
           icon.sizes.split(/\s+/).includes(size)
       );
@@ -717,6 +716,22 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
             'manifest.icons.maskable'
           )
     );
+
+    const hasCombinedIconPurposes = manifest.icons.some(icon => {
+      const purposes = typeof icon?.purpose === 'string' ? icon.purpose.split(/\s+/) : [];
+
+      return purposes.includes('any') && purposes.includes('maskable');
+    });
+
+    if (hasCombinedIconPurposes) {
+      results.push(
+        result(
+          'warn',
+          'Combining "any" and "maskable" icon purposes is discouraged: icons are likely to look incorrect on some platforms due to too much or too little padding',
+          'manifest.icons.combined-purposes'
+        )
+      );
+    }
 
     await checkAssetReachabilityBatch(
       results,

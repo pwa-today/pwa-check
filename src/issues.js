@@ -127,7 +127,7 @@ export const issues = {
   }),
   'manifest.screenshots.types': manifestIssue({
     impact: 'Unsupported screenshot files may not appear in installation dialogs.',
-    fix: 'Use PNG or JPEG images and declare the matching MIME type.'
+    fix: 'Use PNG, JPEG, or WebP images and declare the matching MIME type.'
   }),
   'manifest.screenshots.sizes': manifestIssue({
     impact: 'Screenshots outside supported dimensions may be ignored.',
@@ -192,6 +192,10 @@ export const issues = {
   'manifest.icons.maskable': manifestIssue({
     impact: 'The app icon may be cropped or padded on platforms that apply icon masks.',
     fix: 'Provide maskable icons for the canonical icon sizes.'
+  }),
+  'manifest.icons.combined-purposes': manifestIssue({
+    impact: 'Icons are likely to look incorrect on some platforms due to too much or too little padding.',
+    fix: 'Provide separate icons for "any" and "maskable" purposes, with appropriate padding for each.'
   }),
   'manifest.icons.reachable': manifestIssue({
     impact: 'An unreachable icon cannot be used for installation or launch surfaces.',
@@ -303,8 +307,12 @@ export const issues = {
     priority: 'high'
   }),
   'service-worker.registration.dynamic-unresolved': serviceWorkerIssue({
-    impact: 'The checker cannot inspect the registered worker and static tooling may miss it.',
+    impact: 'The checker cannot determine which worker the registration code references.',
     fix: 'Register the service worker with a statically discoverable script URL.'
+  }),
+  'service-worker.registration.conventional-only': serviceWorkerIssue({
+    impact: 'A worker file alone does not establish that the audited page registers it.',
+    fix: 'Ensure the application registers the service worker and verify registration in browser DevTools.'
   }),
   'service-worker.registration.missing': serviceWorkerIssue({
     impact: 'Offline behavior, background events, and other service-worker features are unavailable.',
