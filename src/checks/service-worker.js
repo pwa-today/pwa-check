@@ -1,6 +1,6 @@
 import { fetchText } from '../utils/fetch-text.js';
 import { result } from '../utils/result.js';
-import { resolveUrl } from '../utils/url.js';
+import { getDocumentBaseUrl, resolveUrl } from '../utils/url.js';
 import { findScriptUrls } from '../utils/find-script-urls.js';
 
 export const findServiceWorkerUrls = (html, pageUrl, resolveBaseUrl = pageUrl) => {
@@ -18,8 +18,17 @@ export const findServiceWorkerUrls = (html, pageUrl, resolveBaseUrl = pageUrl) =
 
   return [
     ...nativeRegistrationUrls,
-    ...findWorkboxWindowServiceWorkerUrls(html, pageUrl)
+    ...findWorkboxWindowServiceWorkerUrls(html, pageUrl),
+    ...findAngularServiceWorkerUrls(html, pageUrl)
   ];
+};
+
+const findAngularServiceWorkerUrls = (source, pageUrl) => {
+  const registrations = source.matchAll(
+    /\b[A-Za-z_$][\w$]*\.register\s*\(\s*(['"])([^'"]*ngsw-worker\.js)\1/g
+  );
+
+  return [...registrations].map(match => resolveUrl(pageUrl, match[2]));
 };
 
 const findWorkboxWindowServiceWorkerUrls = (source, pageUrl) => {
@@ -1025,6 +1034,7 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
   const results = [];
 
   const scriptUrls = findScriptUrls(html, pageUrl);
+  const documentBaseUrl = getDocumentBaseUrl(html, pageUrl);
   const sources = [{ source: html, baseUrl: pageUrl }];
 
   for (const scriptUrl of scriptUrls) {
@@ -1037,7 +1047,7 @@ export const checkServiceWorker = async (html, pageUrl, fetchOptions = {}) => {
   }
 
   const serviceWorkerUrls = sources.flatMap(({ source }) =>
-    findServiceWorkerUrls(source, pageUrl, pageUrl)
+    findServiceWorkerUrls(source, documentBaseUrl, documentBaseUrl)
   );
   const hasResolvedRegistration = serviceWorkerUrls.length > 0;
 

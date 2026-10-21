@@ -1,7 +1,7 @@
 import { fetchText, fetchWithTimeout } from '../utils/fetch-text.js';
 import { findScriptUrls } from '../utils/find-script-urls.js';
 import { result } from '../utils/result.js';
-import { resolveUrl } from '../utils/url.js';
+import { getDocumentBaseUrl, resolveUrl } from '../utils/url.js';
 
 export const findManifestUrl = (source, pageUrl) => {
   const match = source.match(
@@ -14,7 +14,7 @@ export const findManifestUrl = (source, pageUrl) => {
 
   if (!hrefMatch) return null;
 
-  return resolveUrl(pageUrl, hrefMatch[1]);
+  return resolveUrl(getDocumentBaseUrl(source, pageUrl), hrefMatch[1]);
 };
 
 export const loadManifest = async (manifestUrl, fetchOptions = {}) => {
@@ -912,13 +912,14 @@ export const checkManifestMembers = async (manifest, manifestUrl = null, fetchOp
 export const checkManifest = async (html, pageUrl, fetchOptions = {}) => {
   const results = [];
   const scriptUrls = findScriptUrls(html, pageUrl);
+  const documentBaseUrl = getDocumentBaseUrl(html, pageUrl);
   let manifestUrl = findManifestUrl(html, pageUrl);
   const inlineScripts = findInlineScriptSources(html);
   let manifestInjectedInScript = false;
 
   if (!manifestUrl) {
     for (const inlineScript of inlineScripts) {
-      const scriptManifestUrl = findManifestUrlInScript(inlineScript, pageUrl);
+      const scriptManifestUrl = findManifestUrlInScript(inlineScript, documentBaseUrl);
 
       if (scriptManifestUrl) {
         manifestUrl = scriptManifestUrl;

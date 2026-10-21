@@ -87,6 +87,38 @@ test('findServiceWorkerUrls resolves minified Workbox Window registrations', () 
   ]);
 });
 
+test('findServiceWorkerUrls resolves minified Angular service worker registrations', () => {
+  const source = 'function on(T,Ue){navigator.serviceWorker.register(Ue,{scope:"/"})}at.register("ngsw-worker.js",{enabled:true})';
+
+  assert.deepEqual(findServiceWorkerUrls(source, 'https://example.com/'), [
+    'https://example.com/ngsw-worker.js'
+  ]);
+});
+
+test('checkServiceWorker reads a base-relative Angular bundle and worker', async () => {
+  const html = '<html><head><base href="/"><script src="main.js"></script></head></html>';
+  const requestedUrls = [];
+  const responses = {
+    'https://example.com/main.js': 'at.register("ngsw-worker.js",{enabled:true});',
+    'https://example.com/ngsw-worker.js': "self.addEventListener('fetch', event => {});"
+  };
+  const results = await checkServiceWorker(html, 'https://example.com/en/', {
+    fetchFunction: async url => {
+      requestedUrls.push(url);
+      return new Response(responses[url] ?? '', {
+        status: url in responses ? 200 : 404
+      });
+    }
+  });
+
+  assert.deepEqual(requestedUrls, [
+    'https://example.com/main.js',
+    'https://example.com/ngsw-worker.js'
+  ]);
+  assert.ok(results.some(entry => entry.code === 'service-worker.registration.found'));
+  assert.ok(results.some(entry => entry.code === 'service-worker.fetch' && entry.status === 'pass'));
+});
+
 test('collectServiceWorkerSources follows importScripts recursively', async () => {
   const originalFetch = global.fetch;
 

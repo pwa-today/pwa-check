@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { checkManifestMembers, findManifestUrl, loadManifest } from '../src/checks/manifest.js';
+import { checkManifest, checkManifestMembers, findManifestUrl, loadManifest } from '../src/checks/manifest.js';
 
 const getMessage = (results, status) =>
   results.find(entry => entry.status === status)?.message;
@@ -95,6 +95,20 @@ test('findManifestUrl resolves manifest href from html', () => {
     findManifestUrl(html, 'https://example.com/app/'),
     'https://example.com/manifest.json'
   );
+});
+
+test('checkManifest resolves a relative manifest against the document base', async () => {
+  const html = '<html><head><base href="/"><link rel="manifest" href="manifest.webmanifest"></head></html>';
+  const requestedUrls = [];
+  const results = await checkManifest(html, 'https://example.com/en/', {
+    fetchFunction: async url => {
+      requestedUrls.push(url);
+      return new Response(JSON.stringify({ name: 'Example' }), { status: 200 });
+    }
+  });
+
+  assert.deepEqual(requestedUrls, ['https://example.com/manifest.webmanifest']);
+  assert.ok(results.some(entry => entry.code === 'manifest.json.valid' && entry.status === 'pass'));
 });
 
 test('loadManifest parses fetched manifest json', async () => {
